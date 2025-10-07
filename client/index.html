@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Employee Input — Admin</title>
+    <style>
+      :root{--bg:#0b0c0f;--panel:#12141a;--muted:#9196a1;--text:#e8e9ee;--brand:#5b8cff;--danger:#ff5b6e;--border:#232633;--ring:#aab8ff}
+      *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Segoe UI,Roboto}
+      main{max-width:1100px;margin:40px auto;padding:0 16px;display:grid;gap:20px;grid-template-columns:1.1fr .9fr}
+      .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px}
+      .row{display:grid;gap:14px;grid-template-columns:repeat(12,1fr)} .field{grid-column:span 12;display:grid;gap:6px} .half{grid-column:span 6}
+      input,select{padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#0e1016;color:var(--text)}
+      .err{color:var(--danger);font-size:12px;min-height:16px}.error{border-color:var(--danger)!important}
+      button{padding:10px 14px;border-radius:12px;border:1px solid var(--border);background:#151824;color:var(--text);cursor:pointer}
+      .primary{background:var(--brand);border-color:#3c63d1;color:#fff}.ghost{background:transparent}.small{padding:4px 8px}
+      .toast{display:none;margin-top:10px;padding:10px 12px;border-radius:10px;background:#0f1a12;border:1px solid #203826;color:#b9f2c9}
+      .toast.show{display:block}
+      table{width:100%;border-collapse:collapse} th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left}
+      .chip{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--border);background:#0e1120}
+      .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:10px}.muted{color:var(--muted)}
+      @media (max-width:980px){main{grid-template-columns:1fr}.half{grid-column:span 12}}
+      .combo{position:relative}.listbox{position:absolute;z-index:10;top:calc(100% + 6px);left:0;right:0;background:#0e1016;border:1px solid var(--border);border-radius:12px;max-height:220px;overflow:auto;padding:6px}
+      .option{padding:8px 10px;border-radius:8px;cursor:pointer}.option.active{outline:2px solid var(--ring)} .opt-sub{display:block;color:var(--muted);font-size:12px}
+      .health{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:999px;padding:4px 8px}
+      .health .dot{width:8px;height:8px;border-radius:999px;display:inline-block}
+      .checking .dot{background:#aab8ff}.ok .dot{background:#2ecc71}.warn .dot{background:#f1c40f}.error .dot{background:#e74c3c}.offline .dot{background:#bdc3c7}
+      .center{max-width:520px;margin:96px auto;padding:24px;text-align:center}
+    </style>
+  </head>
+  <body><div id="root"></div><script type="module" src="/src/main.jsx"></script></body>
+</html>

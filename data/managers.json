@@ -1,0 +1,12 @@
+[
+  { "id": "m-001", "name": "Ada Lovelace", "title": "Director of Engineering", "department": "Engineering" },
+  { "id": "m-002", "name": "Alan Turing", "title": "Head of Research", "department": "Engineering" },
+  { "id": "m-003", "name": "Grace Hopper", "title": "VP, Platforms", "department": "Engineering" },
+  { "id": "m-004", "name": "Katherine Johnson", "title": "Director of Analytics", "department": "Product" },
+  { "id": "m-005", "name": "Mary Jackson", "title": "Engineering Manager", "department": "Engineering" },
+  { "id": "m-006", "name": "Barbara Liskov", "title": "Chief Architect", "department": "Engineering" },
+  { "id": "m-007", "name": "Linus Torvalds", "title": "Fellow", "department": "Engineering" },
+  { "id": "m-008", "name": "Radia Perlman", "title": "Principal Engineer", "department": "Engineering" },
+  { "id": "m-009", "name": "Hedy Lamarr", "title": "Director, Innovation", "department": "Product" },
+  { "id": "m-010", "name": "Donald Knuth", "title": "Distinguished Engineer", "department": "Engineering" }
+]

@@ -1,0 +1,14 @@
+{
+  "navigationFallback": { "rewrite": "/index.html", "exclude": ["/api/*", "/.auth/*"] },
+  "routes": [
+    { "route": "/", "allowedRoles": ["it-admin"] },
+    { "route": "/api/*", "allowedRoles": ["it-admin"] },
+    { "route": "/login",  "redirect": "/.auth/login/aad?post_login_redirect_uri=/" },
+    { "route": "/logout", "redirect": "/.auth/logout?post_logout_redirect_uri=/signin" },
+    { "route": "/signin", "allowedRoles": ["anonymous", "authenticated"] }
+  ],
+  "responseOverrides": {
+    "401": { "rewrite": "/signin", "statusCode": 200 },
+    "403": { "rewrite": "/signin", "statusCode": 200 }
+  }
+}
