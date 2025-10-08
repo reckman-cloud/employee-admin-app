@@ -1,10 +1,10 @@
 // /api/lists/index.js
-// Reads departments & business units from /data, managers from Entra ID group (Microsoft Graph)
+// Reads departments & business units from /data, managers from Entra ID group (Microsoft Graph) only.
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { DefaultAzureCredential, ClientSecretCredential } = require("@azure/identity");
 
-// --- auth helpers (defense-in-depth)
+// --- auth (defense-in-depth)
 function getPrincipal(req) {
   try {
     const raw = req.headers["x-ms-client-principal"];
@@ -32,7 +32,7 @@ const corsHeaders = (req) => {
 async function resolveDataDir(currentDir) {
   const candidates = [
     process.env.DATA_DIR && path.resolve(process.env.DATA_DIR),
-    path.join(process.cwd(), "data"),        // Functions on Azure: /home/site/wwwroot/data
+    path.join(process.cwd(), "data"),
     path.join(currentDir, "..", "data")
   ].filter(Boolean);
 
@@ -49,33 +49,20 @@ function makeCredential() {
   const tid = process.env.AZURE_TENANT_ID;
   const cid = process.env.AZURE_CLIENT_ID;
   const secret = process.env.AZURE_CLIENT_SECRET;
-  if (tid && cid && secret) {
-    // App Registration (client credentials)
-    return new ClientSecretCredential(tid, cid, secret);
-  }
-  // Managed Identity (recommended in Azure)
+  if (tid && cid && secret) return new ClientSecretCredential(tid, cid, secret);
   return new DefaultAzureCredential({ excludeInteractiveBrowserCredential: true });
 }
-
 async function getGraphToken(credential) {
   const token = await credential.getToken(GRAPH_SCOPE);
   if (!token?.token) throw new Error("Graph token missing");
   return token.token;
 }
-
-function escapeODataLiteral(s) {
-  return String(s).replace(/'/g, "''");
-}
-
+function escapeODataLiteral(s) { return String(s).replace(/'/g, "''"); }
 async function graphGet(url, accessToken) {
   const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!r.ok) {
-    // Hide details from client; throw to allow fallback/500
-    throw new Error(`Graph ${r.status}`);
-  }
+  if (!r.ok) throw new Error(`Graph ${r.status}`);
   return r.json();
 }
-
 async function resolveGroupId(accessToken) {
   if (process.env.MANAGERS_GROUP_ID) return process.env.MANAGERS_GROUP_ID;
   const name = process.env.MANAGERS_GROUP_NAME || "dyn-user-e5s";
@@ -85,12 +72,10 @@ async function resolveGroupId(accessToken) {
   if (!id) throw new Error("Group not found");
   return id;
 }
-
 function isUser(obj) {
   const t = obj?.['@odata.type'] || "";
   return t.toLowerCase().includes("microsoft.graph.user") || !!obj?.userPrincipalName;
 }
-
 function mapUser(u) {
   return {
     id: u.id,
@@ -99,7 +84,6 @@ function mapUser(u) {
     department: u.department || "Unknown"
   };
 }
-
 async function fetchGroupUsers(groupId, accessToken) {
   const items = [];
   let url = `https://graph.microsoft.com/v1.0/groups/${groupId}/members?$select=id,displayName,jobTitle,department,userPrincipalName&$top=999`;
@@ -109,12 +93,10 @@ async function fetchGroupUsers(groupId, accessToken) {
     items.push(...pageUsers);
     url = page?.['@odata.nextLink'] || null;
   }
-  // stable sort by name
   items.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   return items;
 }
-
-// Simple warm-instance cache (5 min)
+// cache 5 minutes
 let cache = { at: 0, managers: [] };
 const CACHE_MS = 5 * 60 * 1000;
 async function getManagers() {
@@ -135,7 +117,6 @@ module.exports = async function (context, req) {
     return;
   }
 
-  // AuthZ: allow only it_admin (unless explicitly bypassed for local dev)
   const p = getPrincipal(req);
   const bypassLocal = process.env.ALLOW_ANON_LOCAL === "true" && (process.env.FUNCTIONS_CORE_TOOLS_ENVIRONMENT === "Development");
   if (!isAdmin(p) && !bypassLocal) {
@@ -150,18 +131,12 @@ module.exports = async function (context, req) {
       fs.readFile(path.join(dataDir, "business-units.json"), "utf8")
     ]);
 
-    // Live managers from Entra ID; fallback to file if Graph fails
-    let managers;
+    // Graph only (no static-file fallback)
+    let managers = [];
     try {
       managers = await getManagers();
     } catch {
-      // Optional fallback if you keep a file at /data/managers.json
-      try {
-        const raw = await fs.readFile(path.join(dataDir, "managers.json"), "utf8");
-        managers = JSON.parse(raw);
-      } catch {
-        managers = [];
-      }
+      managers = []; // degrade without reading any file
     }
 
     context.res = {
