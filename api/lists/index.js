@@ -1,7 +1,7 @@
 const path = require("node:path");
 const fs = require("node:fs/promises");
 function getPrincipal(req){ try{ const raw=req.headers["x-ms-client-principal"]; if(!raw) return null; return JSON.parse(Buffer.from(raw,'base64').toString('utf8')); }catch{ return null; } }
-function isAdmin(p){ return Boolean(p?.userRoles?.includes('it-admin')); }
+function isAdmin(p){ return Boolean(p?.userRoles?.includes('it_admin')); }
 module.exports = async function (context, req) {
   const origin = req.headers?.origin || "*";
   const cors = { "Access-Control-Allow-Origin": origin, "Vary": "Origin", "Access-Control-Allow-Methods": "GET,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };

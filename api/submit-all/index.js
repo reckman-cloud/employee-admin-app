@@ -4,7 +4,7 @@ const getQueueName = () => String(process.env.AZURE_QUEUE_NAME || "").toLowerCas
 const ensureQueue = async () => { const qc = new QueueClient(getConn(), getQueueName()); await qc.createIfNotExists(); return qc; };
 const encodeMsg = (obj) => { const json = JSON.stringify(obj); const b64 = Buffer.from(json, "utf8").toString("base64"); if (Buffer.byteLength(b64) > 64 * 1024) throw new Error("Message too large"); return b64; };
 function getPrincipal(req){ try{ const raw=req.headers["x-ms-client-principal"]; if(!raw) return null; return JSON.parse(Buffer.from(raw,'base64').toString('utf8')); }catch{ return null; } }
-function isAdmin(p){ return Boolean(p?.userRoles?.includes('it-admin')); }
+function isAdmin(p){ return Boolean(p?.userRoles?.includes('it_admin')); }
 
 module.exports = async function (context, req) {
   const origin = req.headers?.origin || "*";

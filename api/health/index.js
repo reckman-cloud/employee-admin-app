@@ -2,7 +2,7 @@ const { QueueClient } = require("@azure/storage-queue");
 const getConn = () => process.env.AZURE_STORAGE_CONNECTION_STRING || process.env.AzureWebJobsStorage || "";
 const getQueueName = () => String(process.env.AZURE_QUEUE_NAME || "").toLowerCase();
 function getPrincipal(req){ try{ const raw=req.headers["x-ms-client-principal"]; if(!raw) return null; return JSON.parse(Buffer.from(raw,'base64').toString('utf8')); }catch{ return null; } }
-function isAdmin(p){ return Boolean(p?.userRoles?.includes('it-admin')); }
+function isAdmin(p){ return Boolean(p?.userRoles?.includes('it_admin')); }
 module.exports = async function (context, req) {
   const origin = req.headers?.origin || "*";
   const cors = { "Access-Control-Allow-Origin": origin, "Vary": "Origin", "Access-Control-Allow-Methods": "GET,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };

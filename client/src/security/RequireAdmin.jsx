@@ -13,7 +13,7 @@ export default function RequireAdmin({ children }){
     return () => { ac.abort(); };
   }, []);
   if (state.loading) return (<div className="center card"><h2>Checking access…</h2><p className="muted">Verifying your admin role.</p></div>);
-  const signedIn = isSignedIn(state.principal); const admin = hasRole(state.principal, 'it-admin');
+  const signedIn = isSignedIn(state.principal); const admin = hasRole(state.principal, 'it_admin');
   if (!signedIn) return <Navigate to="/signin" replace/>;
   if (!admin) return (<div className="center card"><h2>Forbidden</h2><p className="muted">You’re signed in, but not an IT admin.</p><p><a href="/logout"><button>Sign out</button></a></p></div>);
   return children;
