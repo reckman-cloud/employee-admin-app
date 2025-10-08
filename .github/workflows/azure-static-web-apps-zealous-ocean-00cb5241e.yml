@@ -2,8 +2,9 @@
 name: Deploy SWA (React + Functions)
 
 on:
-  push: { branches: [ main ] }
-  workflow_dispatch: {}
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build_and_deploy:
@@ -11,28 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Client: install + build (optional, you can let SWA Action build too)
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: 'npm', cache-dependency-path: client/package.json }
-      - name: Install Client
-        run: npm ci
-        working-directory: client
-      - name: Build Client
-        run: npm run build
-        working-directory: client
-
-      # API: install deps
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: 'npm', cache-dependency-path: api/package.json }
-      - name: Install API deps
-        run: npm ci
-        working-directory: api
-
-      # 👇 PLACE IT HERE (before deploy)
+      # Ensure Functions can read data/ at runtime
       - name: Copy data into API
         run: mkdir -p api/data && cp -R data/* api/data/
 
-      # Deploy
       - name: Deploy to SWA
         uses: Azure/static-web-apps-deploy@v1
         with:
@@ -41,5 +24,6 @@ jobs:
           app_location: client
           api_location: api
           output_location: dist
-          app_build_command: "npm ci && npm run build"
-          api_build_command: "npm ci"
+          # Use npm install (no lockfiles required)
+          app_build_command: "npm install --no-audit --no-fund && npm run build"
+          api_build_command: "npm install --no-audit --no-fund"
