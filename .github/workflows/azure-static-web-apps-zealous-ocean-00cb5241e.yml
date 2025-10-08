@@ -19,7 +19,7 @@ jobs:
       - name: Deploy to SWA
         uses: Azure/static-web-apps-deploy@v1
         with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_ZEALOUS_OCEAN_00CB5241E }}
           action: upload
           app_location: client
           api_location: api
@@ -27,3 +27,4 @@ jobs:
           # Use npm install (no lockfiles required)
           app_build_command: "npm install --no-audit --no-fund && npm run build"
           api_build_command: "npm install --no-audit --no-fund"
+
