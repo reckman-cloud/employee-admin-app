@@ -39,9 +39,9 @@ jobs:
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           action: upload
-          app_location: client                 # where package.json lives
-          app_artifact_location: dist          # <-- use dist (prebuilt)
-          skip_app_build: true                 # <-- don’t let Oryx guess "build"
+          app_location: client
+          output_location: dist           # <-- Vite output (works too)
+          app_build_command: "npm install --no-audit --no-fund && npm run build"
           api_location: api
           api_build_command: "npm install --no-audit --no-fund"
-          data_api_location: ""                # silence swa-db-connections probe
+          data_api_location: ""
