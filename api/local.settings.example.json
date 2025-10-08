@@ -4,6 +4,7 @@
     "FUNCTIONS_WORKER_RUNTIME": "node",
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "AZURE_QUEUE_NAME": "employee-entries",
-    "AZURE_STORAGE_CONNECTION_STRING": ""
+    "AZURE_STORAGE_CONNECTION_STRING": "",
+    "MANAGERS_GROUP_NAME": "dyn-user-e5s",
   }
 }
