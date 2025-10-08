@@ -6,5 +6,6 @@
     "AZURE_QUEUE_NAME": "employee-entries",
     "AZURE_STORAGE_CONNECTION_STRING": "",
     "MANAGERS_GROUP_NAME": "dyn-user-e5s",
+    "MANAGERS_GROUP_ID": "d488d5a2-fba3-4c25-b64c-57c210284bc3"
   }
 }
