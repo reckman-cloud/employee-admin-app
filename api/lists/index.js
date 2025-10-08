@@ -1,14 +1,11 @@
-// /api/lists/index.js
-// Reads departments & business units from /data, managers from Entra ID group (Microsoft Graph) only.
+// Reads departments & business units from /data, managers from Entra ID (Graph) ONLY.
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { DefaultAzureCredential, ClientSecretCredential } = require("@azure/identity");
 
-// --- auth (defense-in-depth)
+// ---- auth (defense-in-depth)
 function getPrincipal(req) {
-  try {
-    const raw = req.headers["x-ms-client-principal"];
-    if (!raw) return null;
+  try { const raw = req.headers["x-ms-client-principal"]; if (!raw) return null;
     return JSON.parse(Buffer.from(raw, "base64").toString("utf8"));
   } catch { return null; }
 }
@@ -17,7 +14,7 @@ function isAdmin(p) {
   return roles.includes("it_admin");
 }
 
-// --- CORS
+// ---- CORS
 const corsHeaders = (req) => {
   const origin = req.headers?.origin || "*";
   return {
@@ -28,16 +25,15 @@ const corsHeaders = (req) => {
   };
 };
 
-// --- data-dir resolution
+// ---- data-dir resolution
 async function resolveDataDir(currentDir) {
   const candidates = [
     process.env.DATA_DIR && path.resolve(process.env.DATA_DIR),
     path.join(process.cwd(), "data"),
     path.join(currentDir, "..", "data")
   ].filter(Boolean);
-
   for (const p of candidates) {
-    try { const stat = await fs.stat(p); if (stat.isDirectory()) return p; } catch {}
+    try { const s = await fs.stat(p); if (s.isDirectory()) return p; } catch {}
   }
   throw new Error("DATA_DIR not found");
 }
@@ -52,10 +48,10 @@ function makeCredential() {
   if (tid && cid && secret) return new ClientSecretCredential(tid, cid, secret);
   return new DefaultAzureCredential({ excludeInteractiveBrowserCredential: true });
 }
-async function getGraphToken(credential) {
-  const token = await credential.getToken(GRAPH_SCOPE);
-  if (!token?.token) throw new Error("Graph token missing");
-  return token.token;
+async function getGraphToken(cred) {
+  const t = await cred.getToken(GRAPH_SCOPE);
+  if (!t?.token) throw new Error("Graph token missing");
+  return t.token;
 }
 function escapeODataLiteral(s) { return String(s).replace(/'/g, "''"); }
 async function graphGet(url, accessToken) {
@@ -63,19 +59,32 @@ async function graphGet(url, accessToken) {
   if (!r.ok) throw new Error(`Graph ${r.status}`);
   return r.json();
 }
+
+// Prefer exact ID; else try mailNickname; else displayName; else startswith(displayName)
 async function resolveGroupId(accessToken) {
   if (process.env.MANAGERS_GROUP_ID) return process.env.MANAGERS_GROUP_ID;
+
+  const nickname = process.env.MANAGERS_GROUP_NICKNAME || "dyn-user-e5s";
   const name = process.env.MANAGERS_GROUP_NAME || "dyn-user-e5s";
-  const filter = encodeURI(`$filter=displayName eq '${escapeODataLiteral(name)}'&$select=id,displayName&$top=1`);
-  const data = await graphGet(`https://graph.microsoft.com/v1.0/groups?${filter}`, accessToken);
+
+  // 1) mailNickname eq 'dyn-user-e5s'
+  const q1 = encodeURI(`$filter=mailNickname eq '${escapeODataLiteral(nickname)}'&$select=id,displayName&$top=1`);
+  let data = await graphGet(`https://graph.microsoft.com/v1.0/groups?${q1}`, accessToken);
+  if (data?.value?.[0]?.id) return data.value[0].id;
+
+  // 2) displayName eq '<name>'
+  const q2 = encodeURI(`$filter=displayName eq '${escapeODataLiteral(name)}'&$select=id,displayName&$top=1`);
+  data = await graphGet(`https://graph.microsoft.com/v1.0/groups?${q2}`, accessToken);
+  if (data?.value?.[0]?.id) return data.value[0].id;
+
+  // 3) startswith(displayName,'<name>')
+  const q3 = encodeURI(`$filter=startswith(displayName,'${escapeODataLiteral(name)}')&$select=id,displayName&$top=1`);
+  data = await graphGet(`https://graph.microsoft.com/v1.0/groups?${q3}`, accessToken);
   const id = data?.value?.[0]?.id;
   if (!id) throw new Error("Group not found");
   return id;
 }
-function isUser(obj) {
-  const t = obj?.['@odata.type'] || "";
-  return t.toLowerCase().includes("microsoft.graph.user") || !!obj?.userPrincipalName;
-}
+
 function mapUser(u) {
   return {
     id: u.id,
@@ -84,28 +93,32 @@ function mapUser(u) {
     department: u.department || "Unknown"
   };
 }
+
+// Use transitive members to resolve nested groups; users-only cast
 async function fetchGroupUsers(groupId, accessToken) {
   const items = [];
-  let url = `https://graph.microsoft.com/v1.0/groups/${groupId}/members?$select=id,displayName,jobTitle,department,userPrincipalName&$top=999`;
+  let url = `https://graph.microsoft.com/v1.0/groups/${groupId}/transitiveMembers/microsoft.graph.user` +
+            `?$select=id,displayName,jobTitle,department,userPrincipalName&$top=999`;
   while (url) {
     const page = await graphGet(url, accessToken);
-    const pageUsers = Array.isArray(page?.value) ? page.value.filter(isUser).map(mapUser) : [];
-    items.push(...pageUsers);
+    const users = Array.isArray(page?.value) ? page.value.map(mapUser) : [];
+    items.push(...users);
     url = page?.['@odata.nextLink'] || null;
   }
   items.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   return items;
 }
-// cache 5 minutes
+
+// 5-min in-memory cache
 let cache = { at: 0, managers: [] };
 const CACHE_MS = 5 * 60 * 1000;
 async function getManagers() {
   const now = Date.now();
   if (now - cache.at < CACHE_MS && cache.managers.length) return cache.managers;
-  const credential = makeCredential();
-  const token = await getGraphToken(credential);
-  const groupId = await resolveGroupId(token);
-  const managers = await fetchGroupUsers(groupId, token);
+  const cred = makeCredential();
+  const token = await getGraphToken(cred);
+  const gid = await resolveGroupId(token);
+  const managers = await fetchGroupUsers(gid, token);
   cache = { at: now, managers };
   return managers;
 }
@@ -131,13 +144,8 @@ module.exports = async function (context, req) {
       fs.readFile(path.join(dataDir, "business-units.json"), "utf8")
     ]);
 
-    // Graph only (no static-file fallback)
     let managers = [];
-    try {
-      managers = await getManagers();
-    } catch {
-      managers = []; // degrade without reading any file
-    }
+    try { managers = await getManagers(); } catch { managers = []; } // no file fallback
 
     context.res = {
       status: 200,
