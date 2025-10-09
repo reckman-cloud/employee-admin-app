@@ -1,7 +1,14 @@
-// Reads departments & business units from /data, managers from Entra ID (Graph) ONLY.
+// /api/lists/index.js
+// Managers from Entra ID via App Registration; returns upn. No static fallback.
+// Requires env: AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, MANAGERS_GROUP_ID
 const path = require("node:path");
 const fs = require("node:fs/promises");
-const { DefaultAzureCredential, ClientSecretCredential } = require("@azure/identity");
+const { ClientSecretCredential } = require("@azure/identity");
+const { fetch: undiciFetch } = require("undici");
+
+const fetch = global.fetch || undiciFetch;
+const GRAPH_SCOPE = "https://graph.microsoft.com/.default";
+const TIMEOUT_MS = 10000;
 
 // ---- auth (defense-in-depth)
 function getPrincipal(req) {
@@ -32,92 +39,72 @@ async function resolveDataDir(currentDir) {
     path.join(process.cwd(), "data"),
     path.join(currentDir, "..", "data")
   ].filter(Boolean);
-  for (const p of candidates) {
-    try { const s = await fs.stat(p); if (s.isDirectory()) return p; } catch {}
-  }
+  for (const p of candidates) { try { const s = await fs.stat(p); if (s.isDirectory()) return p; } catch {} }
   throw new Error("DATA_DIR not found");
 }
 
-// ---------------- Microsoft Graph (Managers) ----------------
-const GRAPH_SCOPE = "https://graph.microsoft.com/.default";
-
-function makeCredential() {
-  const tid = process.env.AZURE_TENANT_ID;
-  const cid = process.env.AZURE_CLIENT_ID;
-  const secret = process.env.AZURE_CLIENT_SECRET;
-  if (tid && cid && secret) return new ClientSecretCredential(tid, cid, secret);
-  return new DefaultAzureCredential({ excludeInteractiveBrowserCredential: true });
+// ---------------- Graph helpers ----------------
+function requireAppReg() {
+  const { AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET } = process.env;
+  if (!AZURE_TENANT_ID || !AZURE_CLIENT_ID || !AZURE_CLIENT_SECRET) {
+    const missing = ['AZURE_TENANT_ID','AZURE_CLIENT_ID','AZURE_CLIENT_SECRET'].filter(k=>!process.env[k]);
+    const err = new Error(`Missing App Registration env: ${missing.join(', ')}`);
+    err.code = 'NO_APP_REG';
+    throw err;
+  }
+  return new ClientSecretCredential(AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET);
 }
-async function getGraphToken(cred) {
-  const t = await cred.getToken(GRAPH_SCOPE);
-  if (!t?.token) throw new Error("Graph token missing");
+async function withTimeout(promiseFactory, ms, label='op'){
+  const ac = new AbortController(); const t=setTimeout(()=>ac.abort(`${label}-timeout`), ms);
+  try { return await promiseFactory(ac.signal); } finally { clearTimeout(t); }
+}
+async function getToken() {
+  const cred = requireAppReg();
+  const t = await withTimeout(sig=> cred.getToken(GRAPH_SCOPE, { abortSignal: sig }), TIMEOUT_MS, 'token');
+  if (!t?.token) throw new Error('No Graph token');
   return t.token;
 }
-function escapeODataLiteral(s) { return String(s).replace(/'/g, "''"); }
-async function graphGet(url, accessToken) {
-  const r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!r.ok) throw new Error(`Graph ${r.status}`);
-  return r.json();
-}
-
-// Prefer exact ID; else try mailNickname; else displayName; else startswith(displayName)
-async function resolveGroupId(accessToken) {
-  if (process.env.MANAGERS_GROUP_ID) return process.env.MANAGERS_GROUP_ID;
-
-  const nickname = process.env.MANAGERS_GROUP_NICKNAME || "dyn-user-e5s";
-  const name = process.env.MANAGERS_GROUP_NAME || "dyn-user-e5s";
-
-  // 1) mailNickname eq 'dyn-user-e5s'
-  const q1 = encodeURI(`$filter=mailNickname eq '${escapeODataLiteral(nickname)}'&$select=id,displayName&$top=1`);
-  let data = await graphGet(`https://graph.microsoft.com/v1.0/groups?${q1}`, accessToken);
-  if (data?.value?.[0]?.id) return data.value[0].id;
-
-  // 2) displayName eq '<name>'
-  const q2 = encodeURI(`$filter=displayName eq '${escapeODataLiteral(name)}'&$select=id,displayName&$top=1`);
-  data = await graphGet(`https://graph.microsoft.com/v1.0/groups?${q2}`, accessToken);
-  if (data?.value?.[0]?.id) return data.value[0].id;
-
-  // 3) startswith(displayName,'<name>')
-  const q3 = encodeURI(`$filter=startswith(displayName,'${escapeODataLiteral(name)}')&$select=id,displayName&$top=1`);
-  data = await graphGet(`https://graph.microsoft.com/v1.0/groups?${q3}`, accessToken);
-  const id = data?.value?.[0]?.id;
-  if (!id) throw new Error("Group not found");
-  return id;
+async function g(url, token, label){
+  return withTimeout(async (signal)=>{
+    const r = await fetch(url, { signal, headers:{ Authorization:`Bearer ${token}`, ConsistencyLevel:'eventual' }});
+    if (!r.ok) throw new Error(`Graph ${r.status}`);
+    return r.json();
+  }, TIMEOUT_MS, label);
 }
 
 function mapUser(u) {
+  // why: include UPN for downstream systems that key on UPN/email
   return {
     id: u.id,
     name: u.displayName || u.userPrincipalName || "(no name)",
+    upn: u.userPrincipalName || null,
     title: u.jobTitle || "Unknown",
     department: u.department || "Unknown"
   };
 }
 
-// Use transitive members to resolve nested groups; users-only cast
-async function fetchGroupUsers(groupId, accessToken) {
+async function fetchGroupUsers(groupId, token) {
   const items = [];
   let url = `https://graph.microsoft.com/v1.0/groups/${groupId}/transitiveMembers/microsoft.graph.user` +
             `?$select=id,displayName,jobTitle,department,userPrincipalName&$top=999`;
   while (url) {
-    const page = await graphGet(url, accessToken);
+    const page = await g(url, token, 'members-page');
     const users = Array.isArray(page?.value) ? page.value.map(mapUser) : [];
     items.push(...users);
     url = page?.['@odata.nextLink'] || null;
   }
-  items.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  items.sort((a,b)=> a.name.localeCompare(b.name, undefined, {sensitivity:'base'}));
   return items;
 }
 
-// 5-min in-memory cache
 let cache = { at: 0, managers: [] };
 const CACHE_MS = 5 * 60 * 1000;
 async function getManagers() {
+  const gid = process.env.MANAGERS_GROUP_ID;
+  if (!gid) throw new Error('MANAGERS_GROUP_ID missing');
   const now = Date.now();
   if (now - cache.at < CACHE_MS && cache.managers.length) return cache.managers;
-  const cred = makeCredential();
-  const token = await getGraphToken(cred);
-  const gid = await resolveGroupId(token);
+  const token = await getToken();
   const managers = await fetchGroupUsers(gid, token);
   cache = { at: now, managers };
   return managers;
@@ -125,17 +112,11 @@ async function getManagers() {
 
 // ---------------- Function entry ----------------
 module.exports = async function (context, req) {
-  if (req.method === "OPTIONS") {
-    context.res = { status: 204, headers: corsHeaders(req) };
-    return;
-  }
+  if (req.method === "OPTIONS") { context.res = { status: 204, headers: corsHeaders(req) }; return; }
 
   const p = getPrincipal(req);
   const bypassLocal = process.env.ALLOW_ANON_LOCAL === "true" && (process.env.FUNCTIONS_CORE_TOOLS_ENVIRONMENT === "Development");
-  if (!isAdmin(p) && !bypassLocal) {
-    context.res = { status: 403, headers: corsHeaders(req), body: { ok: false } };
-    return;
-  }
+  if (!isAdmin(p) && !bypassLocal) { context.res = { status: 403, headers: corsHeaders(req), body: { ok: false } }; return; }
 
   try {
     const dataDir = await resolveDataDir(__dirname);
@@ -145,7 +126,7 @@ module.exports = async function (context, req) {
     ]);
 
     let managers = [];
-    try { managers = await getManagers(); } catch { managers = []; } // no file fallback
+    try { managers = await getManagers(); } catch { managers = []; }
 
     context.res = {
       status: 200,
