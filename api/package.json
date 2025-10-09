@@ -1,12 +1,13 @@
 {
   "name": "employee-functions",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Azure Functions backend for Employee app",
   "main": "host.json",
   "scripts": { "start": "func start", "build": "echo \"No build step\"" },
   "dependencies": {
     "@azure/identity": "^4.5.0",
-    "@azure/storage-queue": "^12.14.0"
+    "@azure/storage-queue": "^12.14.0",
+    "undici": "^6.19.8"
   }
 }
