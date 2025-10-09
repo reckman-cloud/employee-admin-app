@@ -1,3 +1,4 @@
+// /client/src/FormApp.jsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 const API = { lists: '/api/lists', submitAll: '/api/submit-all', health: '/api/health' };
 const STORAGE_KEY = 'emp_entries_v1';
@@ -13,7 +14,8 @@ function HealthBadge(){ const [st,setSt]=useState({cls:'checking',text:'Checking
 }
 function ManagerComboBox({ managers, value, onSelect, error }){ const [q,setQ]=useState(value?.name||''); const [open,setOpen]=useState(false); const [active,setActive]=useState(-1);
   const items=React.useMemo(()=>{ const s=q.trim().toLowerCase(); if(!s) return managers.slice(0,8);
-    const score=m=>{ const n=m.name.toLowerCase(), t=(m.title||'').toLowerCase(), d=(m.department||'').toLowerCase(); let sc=0; if(n.startsWith(s)) sc+=3; if(n.includes(s)) sc+=2; if(t.includes(s)) sc+=1; if(d.includes(s)) sc+=1; return sc; };
+    const score=m=>{ const n=m.name.toLowerCase(), t=(m.title||'').toLowerCase(), d=(m.department||'').toLowerCase(), u=(m.upn||'').toLowerCase(); let sc=0;
+      if(n.startsWith(s)) sc+=3; if(n.includes(s)) sc+=2; if(u.includes(s)) sc+=2; if(t.includes(s)) sc+=1; if(d.includes(s)) sc+=1; return sc; };
     return managers.map(m=>[score(m),m]).filter(([sc])=>sc>0).sort((a,b)=>b[0]-a[0]).map(([,m])=>m).slice(0,8); },[q,managers]);
   React.useEffect(()=>{ setQ(value?.name||''); },[value]); const choose=m=>{ onSelect(m); setQ(m.name); setOpen(false); };
   const onKey=e=>{ if(e.key==='ArrowDown'){e.preventDefault(); setOpen(true); setActive(a=>Math.min(items.length-1,a+1));}
@@ -26,7 +28,7 @@ function ManagerComboBox({ managers, value, onSelect, error }){ const [q,setQ]=u
         value={q} onChange={e=>{ setQ(e.target.value); onSelect(null); setOpen(true); }} onKeyDown={onKey} onBlur={()=> setTimeout(()=>setOpen(false),120)} className={error?'error':''}/>
       {!open?null:(<ul id="manager-listbox" className="listbox" role="listbox">
         {items.length?items.map((m,i)=>(<li key={m.id} className={`option ${i===active?'active':''}`} role="option" onMouseDown={e=>{ e.preventDefault(); choose(m); }}>
-          <strong>{m.name}</strong><span className="opt-sub">{m.title} · {m.department}</span></li>)): <div className="nores" role="note" style={{padding:'8px 10px', color:'#a6abb6'}}>No results</div>}
+          <strong>{m.name}</strong><span className="opt-sub">{m.title} · {m.department}{m.upn?` · ${m.upn}`:''}</span></li>)): <div className="nores" role="note" style={{padding:'8px 10px', color:'#a6abb6'}}>No results</div>}
       </ul>)}
     </div><div id="manager-err" className="err" aria-live="polite">{error||''}</div></div>);
 }
@@ -34,12 +36,12 @@ function EntriesTable({ entries, onEdit, onDelete }){ if(!entries.length) return
   return (<div id="entries-wrap"><table aria-describedby="entries-count"><thead><tr><th>First</th><th>Last</th><th>Title</th><th>Department</th><th>Business Unit</th><th>Manager</th><th style={{width:180}}>Actions</th></tr></thead>
     <tbody>{entries.map(e=> (<tr key={e.id}>
       <td>{e.firstName}</td><td>{e.lastName}</td><td>{e.title}</td><td>{e.department}</td>
-      <td><span className="chip">{e.businessUnit}</span></td><td><span className="chip">{e.managerName}</span></td>
+      <td><span className="chip">{e.businessUnit}</span></td><td><span className="chip">{e.managerName || e.managerUpn || e.managerId}</span></td>
       <td><button type="button" onClick={()=>onEdit(e.id)}>Edit</button>{' '}<button type="button" onClick={()=>onDelete(e.id)}>Delete</button></td></tr>))}</tbody></table></div>);
 }
 export default function FormApp(){
   const [lists, setLists] = useState({ departments: [], businessUnits: [], managers: [] });
-  const [form, setForm] = useState({ id:null, firstName:'', lastName:'', title:'', department:'', businessUnit:'', managerId:'', managerName:'' });
+  const [form, setForm] = useState({ id:null, firstName:'', lastName:'', title:'', department:'', businessUnit:'', managerId:'', managerUpn:'', managerName:'' });
   const [errors, setErrors] = useState({});
   const [entries, setEntries] = useLocalStorage(STORAGE_KEY, []);
   const [toast, setToast] = useState('');
@@ -52,16 +54,30 @@ export default function FormApp(){
   const validate=()=>{ const e={}; if(!form.firstName||form.firstName.trim().length<2) e.firstName='First name is required';
     if(!form.lastName||form.lastName.trim().length<2) e.lastName='Last name is required'; if(!form.title||form.title.trim().length<2) e.title='Title is required';
     if(!form.department) e.department='Department is required'; if(!form.businessUnit) e.businessUnit='Business Unit is required'; if(!form.managerId) e.manager='Select a manager from the list'; setErrors(e); return !Object.keys(e).length; };
-  const resetForm=()=>{ setForm({ id:null, firstName:'', lastName:'', title:'', department:'', businessUnit:'', managerId:'', managerName:'' }); setErrors({}); };
+  const resetForm=()=>{ setForm({ id:null, firstName:'', lastName:'', title:'', department:'', businessUnit:'', managerId:'', managerUpn:'', managerName:'' }); setErrors({}); };
   const saveEntry=e=>{ e.preventDefault(); if(!validate()) return; const now=new Date().toISOString();
-    setEntries(prev=> form.id? prev.map(x=> x.id===form.id? {...form,_meta:{...(x._meta||{}),savedAt:now,schema:1}}:x)
-                             : [...prev, {...form,id:uuid(),_meta:{savedAt:now,submittedAt:null,schema:1}}]); resetForm(); showToast('Saved.'); };
-  const editEntry=id=>{ const x=entries.find(e=>e.id===id); if(!x) return; setForm({ id:x.id, firstName:x.firstName, lastName:x.lastName, title:x.title, department:x.department, businessUnit:x.businessUnit, managerId:x.managerId, managerName:x.managerName }); };
+    setEntries(prev=> form.id? prev.map(x=> x.id===form.id? {...form,_meta:{...(x._meta||{}),savedAt:now,schema:2}}:x)
+                             : [...prev, {...form,id:uuid(),_meta:{savedAt:now,submittedAt:null,schema:2}}]); resetForm(); showToast('Saved.'); };
+  const editEntry=id=>{ const x=entries.find(e=>e.id===id); if(!x) return; setForm({ id:x.id, firstName:x.firstName, lastName:x.lastName, title:x.title, department:x.department, businessUnit:x.businessUnit, managerId:x.managerId, managerUpn:x.managerUpn||'', managerName:x.managerName||'' }); };
   const deleteEntry=id=> setEntries(prev=> prev.filter(x=> x.id!==id));
   const clearAll=()=>{ if(!entries.length) return; if(confirm('Clear ALL saved entries?')) setEntries([]); };
-  const exportJSON=()=>{ const b=new Blob([JSON.stringify(entries,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`employees-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(a.href); };
+
+  // Build payload entries: remove managerName, ensure managerUpn present
+  const buildPayload = (listManagers, items) => items.map((e) => {
+    const { managerName, ...rest } = e;
+    if (!rest.managerUpn && rest.managerId) {
+      const m = listManagers.find(m => m.id === rest.managerId);
+      if (m?.upn) rest.managerUpn = m.upn; // why: backfill older saved entries
+    }
+    return rest;
+  });
+
+  const exportJSON=()=>{ const payload = buildPayload(lists.managers, entries);
+    const b=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=`employees-${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(a.href); };
+
   const submitAll=async()=>{ const toSubmit=entries.filter(e=>!e._meta?.submittedAt); if(!toSubmit.length){ showToast('Nothing to submit.'); return; }
-    const r=await fetch(API.submitAll,{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ entries: toSubmit }) });
+    const payloadEntries = buildPayload(lists.managers, toSubmit);
+    const r=await fetch(API.submitAll,{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ entries: payloadEntries }) });
     const d=await r.json().catch(()=>({})); if(!r.ok){ showToast('Submit failed.'); return; }
     const ids=new Set((d.accepted||[]).map(x=>x.id)); const t=d.submittedAt||new Date().toISOString(); setEntries(prev=> prev.map(e=> ids.has(e.id)? {...e,_meta:{...(e._meta||{}),submittedAt:t}}:e));
     const ok=(d.accepted||[]).length, fail=(d.failed||[]).length; showToast(fail?`Queued ${ok}, ${fail} failed.`:`Queued ${ok} ${ok===1?'entry':'entries'}.`); };
@@ -70,7 +86,7 @@ export default function FormApp(){
     <main>
       <section className="card" aria-labelledby="form-title">
         <h1 id="form-title">Employee Input Form</h1>
-        <p className="muted">Only IT admins can access. React + Azure Functions.</p>
+        <p className="muted">Managers include UPN; JSON uses UPN instead of name.</p>
         <form onSubmit={saveEntry} onReset={resetForm} noValidate>
           <div className="row">
             <div className="field half"><label htmlFor="firstName">First name <span className="muted">• required</span></label>
@@ -91,7 +107,7 @@ export default function FormApp(){
                 <option value="">Select…</option>{lists.businessUnits.map(b=> <option key={b} value={b}>{b}</option>)}
               </select><div className="err">{errors.businessUnit||''}</div></div>
             <ManagerComboBox managers={lists.managers} value={form.managerId?{id:form.managerId,name:form.managerName}:null}
-              onSelect={m=> m? setForm(f=>({...f,managerId:m.id,managerName:m.name})) : setForm(f=>({...f,managerId:'',managerName:''}))} error={errors.manager}/>
+              onSelect={m=> m? setForm(f=>({...f,managerId:m.id,managerUpn:m.upn||'',managerName:m.name})) : setForm(f=>({...f,managerId:'',managerUpn:'',managerName:''}))} error={errors.manager}/>
           </div>
           <div className="toolbar" style={{marginTop:10}}>
             <button className="primary" type="submit" disabled={!lists.managers.length}>Save Entry</button>
@@ -116,7 +132,7 @@ export default function FormApp(){
           <button type="button" className="primary" onClick={submitAll} disabled={!entries.length || !unsubmitted}>Submit All{unsubmitted?` (${unsubmitted})`:''}</button>
           <button type="button" className="ghost" onClick={clearAll}>Clear All</button>
         </div>
-        <EntriesTable entries={entries} onEdit={id=>{ const e = entries.find(x=>x.id===id); if(!e) return; setForm({ id:e.id, firstName:e.firstName, lastName:e.lastName, title:e.title, department:e.department, businessUnit:e.businessUnit, managerId:e.managerId, managerName:e.managerName }); }} onDelete={id=>setEntries(prev=>prev.filter(x=>x.id!==id))}/>
+        <EntriesTable entries={entries} onEdit={id=>{ const e = entries.find(x=>x.id===id); if(!e) return; setForm({ id:e.id, firstName:e.firstName, lastName:e.lastName, title:e.title, department:e.department, businessUnit:e.businessUnit, managerId:e.managerId, managerUpn:e.managerUpn||'', managerName:e.managerName||'' }); }} onDelete={id=>setEntries(prev=>prev.filter(x=>x.id!==id))}/>
       </section>
     </main>
   );
