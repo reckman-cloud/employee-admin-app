@@ -93,8 +93,8 @@ export default function FormApp(){
       <UserBadge />
       <main>
         <section className="card" aria-labelledby="form-title">
-          <h1 id="form-title">Employee Input Form</h1>
-          <p className="muted">Managers include UPN; JSON uses UPN; <code>fullTime</code> boolean added.</p>
+          <h1 id="form-title">New Employee Input Form</h1>
+          <p className="muted">All fields required.</p>
           <form onSubmit={saveEntry} onReset={resetForm} noValidate>
             <div className="row">
               <div className="field half"><label htmlFor="firstName">First name <span className="muted">• required</span></label>
