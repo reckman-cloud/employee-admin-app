@@ -63,8 +63,9 @@ jobs:
           app_build_command: "npm install --no-audit --no-fund && npm run build"
           api_build_command: "npm install --no-audit --no-fund"
           data_api_location: ""
-          production_branch: main
-          deployment_environment: development   # <-- targets the named preview
+          production_branch: "main"
+          deployment_environment: "development"   # <-- targets the named preview
+
 
 
 
