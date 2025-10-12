@@ -1,7 +1,7 @@
 # .github/workflows/azure-static-web-apps.yml
 name: Deploy SWA (React + Functions)
 on:
-  push: { branches: [ main ] }
+  push: { branches: [ main, development ] }
   workflow_dispatch: {}
 
 jobs:
@@ -45,3 +45,5 @@ jobs:
           api_location: api
           api_build_command: "npm install --no-audit --no-fund"
           data_api_location: ""
+          production_branch: "main"
+
