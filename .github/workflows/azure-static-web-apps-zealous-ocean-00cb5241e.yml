@@ -49,7 +49,8 @@ jobs:
           api_build_command: "npm install --no-audit --no-fund"
           data_api_location: ""
           production_branch: "main"
-          development_environment: "development"
+          deployment_environment: "development"
+
 
 
 
