@@ -5,6 +5,7 @@ on:
     branches:
       "**"
   pull_request:
+    types: [opened, synchronize, reopened, closed]
     branches: [ main ]
   workflow_dispatch: {}
 
@@ -50,6 +51,7 @@ jobs:
           api_build_command: "npm install --no-audit --no-fund"
           data_api_location: ""
           production_branch: "main"
+
 
 
 
