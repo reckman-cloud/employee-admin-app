@@ -20,6 +20,12 @@ module.exports = async function (context, req) {
     const conn = getConn();
     const queue = getQueueName();
 
+    context.log('Health storage settings', {
+      queue,
+      connectionStringLength: conn?.length || 0,
+      connectionStringPreview: conn ? `${conn.slice(0, 6)}...${conn.slice(-4)}` : null,
+    });
+
     if (!conn || !queue) {
       context.res = { status: 503, headers: { "Content-Type":"application/json; charset=utf-8", ...cors }, body: { ok:false, reason:'missing-storage-settings' } };
       return;
