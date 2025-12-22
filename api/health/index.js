@@ -3,6 +3,26 @@ const getConn = () => process.env.AZURE_STORAGE_CONNECTION_STRING || process.env
 const getQueueName = () => String(process.env.AZURE_QUEUE_NAME || "").toLowerCase();
 const allowAnonymousHealth = () => process.env.ALLOW_ANON_HEALTH === 'true';
 
+const ensureCrypto = () => {
+  const status = { available: typeof globalThis.crypto !== 'undefined', polyfilled: false };
+
+  if (!status.available) {
+    try {
+      const nodeCrypto = require('crypto');
+      if (nodeCrypto?.webcrypto) {
+        globalThis.crypto = nodeCrypto.webcrypto;
+        status.available = true;
+        status.polyfilled = true;
+      }
+    } catch {
+      // Fall through; diagnostics will reflect crypto availability.
+    }
+  }
+
+  status.available = typeof globalThis.crypto !== 'undefined';
+  return status;
+};
+
 const parseConnectionInfo = conn => {
   if (!conn) return {};
 
@@ -61,6 +81,7 @@ module.exports = async function (context, req) {
   const cors = { "Access-Control-Allow-Origin": origin, "Vary": "Origin", "Access-Control-Allow-Methods": "GET,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
   if (req.method === "OPTIONS") { context.res = { status: 204, headers: cors }; return; }
 
+  const cryptoStatus = ensureCrypto();
   const p = getPrincipal(req);
   const bypassLocal = process.env.ALLOW_ANON_LOCAL === 'true' && (process.env.FUNCTIONS_CORE_TOOLS_ENVIRONMENT === 'Development');
   const anonymousHealth = allowAnonymousHealth();
@@ -89,7 +110,7 @@ module.exports = async function (context, req) {
 
     const props = await qc.getProperties();
     context.res = { status: 200, headers: { "Content-Type":"application/json; charset=utf-8", ...cors },
-      body: { ok:true, queue:{ name: qc.name, approximateMessagesCount: props.approximateMessagesCount ?? null }, storage } };
+      body: { ok:true, queue:{ name: qc.name, approximateMessagesCount: props.approximateMessagesCount ?? null }, storage, environment: { cryptoAvailable: cryptoStatus.available, cryptoPolyfilled: cryptoStatus.polyfilled } } };
   } catch (error) {
     const reason = error?.details?.errorCode || error?.code || 'queue-connection-failed';
     const conn = getConn();
@@ -98,6 +119,8 @@ module.exports = async function (context, req) {
       reason,
       statusCode: error?.statusCode ?? null,
       message: redact(error?.message || String(error), conn),
+      cryptoAvailable: cryptoStatus.available,
+      cryptoPolyfilled: cryptoStatus.polyfilled,
     };
 
     context.log.error('Health check failed', reason, diagnostics.message);
