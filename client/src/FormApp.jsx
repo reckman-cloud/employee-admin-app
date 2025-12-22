@@ -20,6 +20,20 @@ const uuid = () =>
     return value.toString(16);
   });
 
+const MONTH_ABBREVS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+const formatStartDate = raw => {
+  if (!raw) return '';
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return '';
+
+  const month = MONTH_ABBREVS[parsed.getUTCMonth()];
+  const day = String(parsed.getUTCDate()).padStart(2, '0');
+  const year = parsed.getUTCFullYear();
+  return `${month}${day},${year}`;
+};
+
 function useLocalStorage(key, initialValue) {
   // Hydrate state from localStorage on first render and mirror updates back
   // to storage so saved entries survive reloads.
@@ -255,6 +269,7 @@ function EntriesTable({ entries, onEdit, onDelete }) {
             <th>Title</th>
             <th>Department</th>
             <th>Business Unit</th>
+            <th>Start Date</th>
             <th>Full Time</th>
             <th>Manager</th>
             <th style={{ width: 180 }}>Actions</th>
@@ -270,6 +285,9 @@ function EntriesTable({ entries, onEdit, onDelete }) {
               <td>{entry.department}</td>
               <td>
                 <span className="chip">{entry.businessUnit}</span>
+              </td>
+              <td>
+                <span className="chip">{formatStartDate(entry.startDate)}</span>
               </td>
               <td>
                 <span className="chip">{entry.fullTime ? 'Yes' : 'No'}</span>
@@ -296,6 +314,12 @@ function EntriesTable({ entries, onEdit, onDelete }) {
 export default function FormApp() {
   // Form field values, select lists, local storage cache, and UI helpers.
   const [lists, setLists] = useState({ departments: [], businessUnits: [], managers: [] });
+  const defaultStartDate = () => {
+    const now = new Date();
+    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  };
+
   const [form, setForm] = useState({
     id: null,
     firstName: '',
@@ -307,6 +331,7 @@ export default function FormApp() {
     managerUpn: '',
     managerName: '',
     fullTime: true,
+    startDate: defaultStartDate(),
   });
   const [errors, setErrors] = useState({});
   const [entries, setEntries] = useLocalStorage(STORAGE_KEY, []);
@@ -381,6 +406,10 @@ export default function FormApp() {
       validationErrors.manager = 'Select a manager from the list';
     }
 
+    if (!form.startDate) {
+      validationErrors.startDate = 'Start date is required';
+    }
+
     setErrors(validationErrors);
     return !Object.keys(validationErrors).length;
   };
@@ -397,6 +426,7 @@ export default function FormApp() {
       managerUpn: '',
       managerName: '',
       fullTime: true,
+      startDate: defaultStartDate(),
     });
     setErrors({});
   };
@@ -412,12 +442,12 @@ export default function FormApp() {
       form.id
         ? previous.map(entry =>
             entry.id === form.id
-              ? { ...form, _meta: { ...(entry._meta || {}), savedAt: now, schema: 3 } }
+              ? { ...form, _meta: { ...(entry._meta || {}), savedAt: now, schema: 4 } }
               : entry,
           )
         : [
             ...previous,
-            { ...form, id: uuid(), _meta: { savedAt: now, submittedAt: null, schema: 3 } },
+            { ...form, id: uuid(), _meta: { savedAt: now, submittedAt: null, schema: 4 } },
           ],
     );
 
@@ -441,6 +471,7 @@ export default function FormApp() {
       managerUpn: existing.managerUpn || '',
       managerName: existing.managerName || '',
       fullTime: typeof existing.fullTime === 'boolean' ? existing.fullTime : true,
+      startDate: existing.startDate || defaultStartDate(),
     });
   };
 
@@ -455,8 +486,8 @@ export default function FormApp() {
 
   // Normalize the outgoing payload (fill missing manager UPN, ensure booleans)
   // so uploads stay consistent regardless of how data was entered.
-  const buildPayload = (listManagers, items) =>
-    items.map(entry => {
+  const buildPayload = (listManagers, items) => {
+    return items.map(entry => {
       const { managerName, ...rest } = entry;
 
       if (!rest.managerUpn && rest.managerId) {
@@ -465,8 +496,11 @@ export default function FormApp() {
       }
 
       if (typeof rest.fullTime !== 'boolean') rest.fullTime = true;
+
+      rest.startDate = formatStartDate(rest.startDate || defaultStartDate());
       return rest;
     });
+  };
 
   // Allow downloading the current cache as a timestamped JSON file for offline
   // sharing or debugging.
@@ -605,6 +639,23 @@ export default function FormApp() {
               </div>
 
               <div className="field half">
+                <label htmlFor="startDate">
+                  Start Date <span className="muted">• required</span>
+                </label>
+                <input
+                  id="startDate"
+                  type="date"
+                  value={form.startDate}
+                  onChange={event => setField('startDate', event.target.value)}
+                  className={errors.startDate ? 'error' : ''}
+                  aria-describedby="startDate-err"
+                />
+                <div id="startDate-err" className="err" aria-live="polite">
+                  {errors.startDate || ''}
+                </div>
+              </div>
+
+              <div className="field half">
                 <label htmlFor="fullTime">Full time</label>
                 <input
                   id="fullTime"
@@ -659,7 +710,7 @@ export default function FormApp() {
         <aside className="card" aria-labelledby="preview-title">
           <h2 id="preview-title">Live Preview (JSON)</h2>
           <pre className="kvs" style={{ whiteSpace: 'pre-wrap' }} aria-live="polite">
-            {JSON.stringify(form, null, 2)}
+            {JSON.stringify(buildPayload(lists.managers, [form])[0], null, 2)}
           </pre>
         </aside>
 
@@ -688,23 +739,7 @@ export default function FormApp() {
 
           <EntriesTable
             entries={entries}
-            onEdit={id => {
-              const entry = entries.find(x => x.id === id);
-              if (!entry) return;
-
-              setForm({
-                id: entry.id,
-                firstName: entry.firstName,
-                lastName: entry.lastName,
-                title: entry.title,
-                department: entry.department,
-                businessUnit: entry.businessUnit,
-                managerId: entry.managerId,
-                managerUpn: entry.managerUpn || '',
-                managerName: entry.managerName || '',
-                fullTime: typeof entry.fullTime === 'boolean' ? entry.fullTime : true,
-              });
-            }}
+            onEdit={editEntry}
             onDelete={id => setEntries(previous => previous.filter(x => x.id !== id))}
           />
         </section>
