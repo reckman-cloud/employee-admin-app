@@ -16,5 +16,5 @@ If storage settings are present but the `/api/health` badge still shows an error
 
 The health probe no longer attempts to create the queue; it only checks that the configured queue exists and can be read. When using SAS connection strings in previews, ensure the token grants at least `r` permissions on the queue so the probe can retrieve properties instead of failing with `queue-connection-failed`.
 
-To help diagnose preview slots, the `/api/health` response includes a masked snapshot of the storage configuration (queue name and connection-string length/preview) alongside the status. This makes it clear on the client whether environment variables were populated even when the connection cannot be established.
+To help diagnose preview slots, the `/api/health` response includes a masked snapshot of the storage configuration (queue name and connection-string length/preview) alongside the status. This makes it clear on the client whether environment variables were populated even when the connection cannot be established. When a connection attempt still fails, the response now returns a sanitized diagnostic payload (reason code, status code, redacted message, and parsed SAS/account metadata) to help confirm permissions and endpoint selection without leaking secrets.
 
