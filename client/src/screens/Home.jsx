@@ -15,6 +15,9 @@ export default function Home(){
             <Link to="/form" style={{ textDecoration: 'none' }}>
               <button className="primary" type="button">Go to Form app</button>
             </Link>
+            <Link to="/offboard" style={{ textDecoration: 'none' }}>
+              <button type="button">Offboarding</button>
+            </Link>
             <span className="muted">Save drafts locally and submit when ready.</span>
           </div>
         </section>

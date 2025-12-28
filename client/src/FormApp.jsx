@@ -1,12 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { API, fetchLists } from './api.js';
 import UserBadge from './security/UserBadge.jsx';
-
-// Central list of backend endpoints used throughout the form.
-const API = {
-  lists: '/api/lists',
-  submitAll: '/api/submit-all',
-  health: '/api/health',
-};
 
 // LocalStorage key for persisting saved employee entries between sessions.
 const STORAGE_KEY = 'emp_entries_v1';
@@ -354,21 +348,10 @@ export default function FormApp() {
     // Fetch select lists on mount. We guard on `alive` so state isn't set
     // after unmount (e.g., during navigation in tests or previews).
     (async () => {
-      try {
-        const response = await fetch(API.lists, { cache: 'no-store' });
-        const data = await response.json();
+      const data = await fetchLists();
+      if (!alive) return;
 
-        if (!response.ok) throw new Error();
-        if (!alive) return;
-
-        setLists({
-          departments: data.departments || [],
-          businessUnits: data.businessUnits || [],
-          managers: data.managers || [],
-        });
-      } catch {
-        setLists({ departments: [], businessUnits: [], managers: [] });
-      }
+      setLists(data);
     })();
 
     return () => {
