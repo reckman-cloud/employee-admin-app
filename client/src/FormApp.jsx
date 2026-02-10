@@ -31,7 +31,7 @@ const formatStartDate = raw => {
   const month = MONTH_ABBREVS[parsed.getUTCMonth()];
   const day = String(parsed.getUTCDate()).padStart(2, '0');
   const year = parsed.getUTCFullYear();
-  return `${month}${day},${year}`;
+  return `${month}${day},${year}!!`;
 };
 
 function useLocalStorage(key, initialValue) {
