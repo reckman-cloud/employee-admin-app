@@ -1,6 +1,9 @@
 const { QueueClient } = require("@azure/storage-queue");
+const { TableClient } = require("@azure/data-tables");
 const getConn = () => process.env.AZURE_STORAGE_CONNECTION_STRING || process.env.AzureWebJobsStorage || "";
 const getQueueName = () => String(process.env.AZURE_QUEUE_NAME || "").toLowerCase();
+const getTableName = () => process.env.AZURE_STATUS_TABLE_NAME || "employeestatus";
+const PARTITION_KEY = "employee-entries";
 const ensureQueue = async () => { const qc = new QueueClient(getConn(), getQueueName()); await qc.createIfNotExists(); return qc; };
 const encodeMsg = (obj) => { const json = JSON.stringify(obj); const b64 = Buffer.from(json, "utf8").toString("base64"); if (Buffer.byteLength(b64) > 64 * 1024) throw new Error("Message too large"); return b64; };
 function getPrincipal(req){ try{ const raw=req.headers["x-ms-client-principal"]; if(!raw) return null; return JSON.parse(Buffer.from(raw,'base64').toString('utf8')); }catch{ return null; } }
@@ -20,13 +23,30 @@ module.exports = async function (context, req) {
 
   try {
     const qc = await ensureQueue();
+    const table = TableClient.fromConnectionString(getConn(), getTableName());
+    await table.createTable().catch(() => {});
+
     const submittedAt = new Date().toISOString();
     const accepted = [], failed = [];
     const tasks = entries.map((e, index) => async () => {
       const id = e?.id || `no-id-${index}`;
-      try { const envelope = { type: "employee.entry", schema: 1, submittedAt, id, data: e };
-        const payload = encodeMsg(envelope); const out = await qc.sendMessage(payload); accepted.push({ id, messageId: out.messageId }); }
-      catch { failed.push({ id }); }
+      try {
+        const envelope = { type: "employee.entry", schema: 1, submittedAt, id, data: e };
+        const payload = encodeMsg(envelope);
+        const out = await qc.sendMessage(payload);
+        await table.upsertEntity({
+          partitionKey: PARTITION_KEY,
+          rowKey: id,
+          status: "queued",
+          stageName: null,
+          stageNumber: null,
+          totalStages: null,
+          failedStage: null,
+          statusMessage: null,
+          updatedAt: submittedAt,
+        }, "Replace");
+        accepted.push({ id, messageId: out.messageId });
+      } catch { failed.push({ id }); }
     });
     for (let i=0;i<tasks.length;i+=5) await Promise.all(tasks.slice(i,i+5).map(fn=>fn()));
     context.res = { status: 200, headers: { "Content-Type":"application/json; charset=utf-8", ...cors }, body: { ok: failed.length===0, submittedAt, accepted, failed } };
