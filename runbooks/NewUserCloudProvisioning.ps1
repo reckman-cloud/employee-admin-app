@@ -10,16 +10,17 @@ Param(
 #Write-Out $data
 
 
-$kingsnetworkid = "87022c44-7222-4951-9f99-12b93866a30d"
-$appid = "01c512a5-f37c-4804-a307-245c16bb1f7d"
-$secret = "YMx8Q~Rul1e-_cSGF4ahCiP5Vc~7L64A~VMrLbfh"
+$kingsnetworkid = Get-AutomationVariable -Name 'Graph-KingsNetworkGroupId'
+$appid = Get-AutomationVariable -Name 'Graph-ClientId'
+$secret = Get-AutomationVariable -Name 'Graph-ClientSecret'
+$tenantId = Get-AutomationVariable -Name 'AzureAD-TenantId'
 $secretid = ConvertTo-SecureString $secret -AsPlainText -Force
 $clientsecretcred = New-Object -TypeName System.Management.Automation.PSCredential -Argumentlist $appid,$secretid
 
 $dataarr = $data -split '@'
 if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
 
-    Connect-MgGraph -ClientSecretCredential $clientsecretcred -TenantId "f4b24903-3e53-44b6-a33e-24597567c14e"
+    Connect-MgGraph -ClientSecretCredential $clientsecretcred -TenantId $tenantId
     $e5Sku = Get-MgSubscribedSku -All | Where SkuPartNumber -eq 'SPE_E5'
     $vivaSku = Get-MgSubscribedSku -All | Where SkuPartNumber -eq 'Viva_Connection_Mini_Bundle'
 
