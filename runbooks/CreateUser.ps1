@@ -1,4 +1,6 @@
 Param(
+     [parameter] (Mandatory=$true)]
+     [String]$entryId,
      [parameter (Mandatory=$true)]
      [String]$firstName,
      [parameter (Mandatory=$true)]
@@ -15,7 +17,22 @@ Param(
      [String]$startDate
 )
 
+function Set-EntryStatus {
+    param($EntryId, $Status, $StageName, $StageNumber, $TotalStages, $StatusMessage)
+    $url = Get-AutomationVariable -Name 'StatusUpdate-Url'
+    $key = Get-AutomationVariable -Name 'StatusUpdate-Key'
+    $body = @{ id=$EntryId; status=$Status; stageName=$StageName;
+               stageNumber=$StageNumber; totalStages=$TotalStages;
+               statusMessage=$StatusMessage } | ConvertTo-Json
+    try {
+        Invoke-RestMethod -Uri $url -Method Post -Body $body `
+            -Headers @{ "Content-Type"="application/json"; "x-update-key"=$key }
+    } catch { Write-Warning "Status update failed: $_" }
+}
+try {
 
+
+Set-EntryStatus $entryId "stage_create_user" "Creating AD Account" 1 3 $null
 
 
 $password = $startDate
@@ -56,6 +73,8 @@ Add-PsSnapin *RecipientManagement
 
 $newuser = New-RemoteMailbox -Name "$firstName $lastName" -FirstName $firstName -LastName $lastName -UserPrincipalName $upn -OnPremisesOrganizationalUnit "OU=Users,OU=$department,OU=Team Members,DC=KINGSHQ,DC=COM" -Password (ConvertTo-SecureString -String $password -AsPlainText -Force) -Archive -PrimarySmtpAddress $upn
 #New-RemoteMailbox -Name "Test face" -FirstName "Test" -LastName "Face" -UserPrincipalName "tface@kings.com" -OnPremisesOrganizationalUnit "OU=Users,OU=Analytics,OU=Team Members,DC=KINGSHQ,DC=COM" -Password (ConvertTo-SecureString -String "Oct15,2025" -AsPlainText -Force) -Archive -PrimarySmtpAddress "tface@kings.com"
+Set-EntryStatus $entryId "stage_create_user" "AD Sync Pending" 1 3 $null
+
 
 Start-Sleep 60
 
@@ -131,5 +150,10 @@ $s = New-PSSession -ComputerName adconnect02.kingshq.com
 $result = Invoke-Command -Session $s {Start-ADSyncSyncCycle -PolicyType delta}
 Remove-PSsession $s
 
+Set-EntryStatus $entryId "stage_cloud_provisioning" "Waiting for Cloud Sync" 2 3 $null
+
 #[OutputType([string])]
 Write-Output $upn
+} catch {
+    Set-EntryStatus $entryId "failed" "Create AD Account" 1 3 $_.Exception.Message
+}
