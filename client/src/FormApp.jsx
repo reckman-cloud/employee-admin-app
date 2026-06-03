@@ -11,7 +11,7 @@ const API = {
 
 // Statuses that mean the entry is actively moving through the pipeline and
 // should be polled for updates.
-const IN_FLIGHT_STATUSES = new Set(['queued', 'processing', 'provisioned']);
+const IN_FLIGHT_STATUSES = new Set(['queued', 'processing']);
 const isInFlight = s => IN_FLIGHT_STATUSES.has(s) || /^stage_/.test(s || '');
 
 // Statuses that block re-submission (already in the pipeline or done).
@@ -405,6 +405,8 @@ export default function FormApp() {
   });
   const [errors, setErrors] = useState({});
   const [entries, setEntries] = useLocalStorage(STORAGE_KEY, []);
+  const entriesRef = useRef(entries);
+  useEffect(() => { entriesRef.current = entries; }, [entries]);
   const [toast, setToast] = useState('');
 
   // Count entries that can still be submitted (pending or previously failed).
@@ -454,7 +456,7 @@ export default function FormApp() {
     const controllerRef = { current: null };
 
     const poll = async () => {
-      const toWatch = entries.filter(e => isInFlight(e._meta?.status));
+      const toWatch = entriesRef.current.filter(e => isInFlight(e._meta?.status));
       if (!toWatch.length) return;
 
       controllerRef.current?.abort();
@@ -501,7 +503,7 @@ export default function FormApp() {
       clearInterval(id);
       controllerRef.current?.abort();
     };
-  }, [entries]);
+  }, []);
 
   const setField = (key, value) => setForm(previous => ({ ...previous, [key]: value }));
 
