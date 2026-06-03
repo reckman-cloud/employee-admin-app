@@ -1,11 +1,26 @@
 Param(
      [parameter (Mandatory=$true)]
+     [String]$entryId,
+     [parameter (Mandatory=$true)]
      [String]$upn,
      [parameter (Mandatory=$true)]
      [Boolean]$fulltime,
      [parameter (Mandatory=$true)]
      [String]$department
 )
+
+function Set-EntryStatus {
+    param($EntryId, $Status, $StageName, $StageNumber, $TotalStages, $StatusMessage)
+    $url = Get-AutomationVariable -Name 'StatusUpdate-Url'
+    $key = Get-AutomationVariable -Name 'StatusUpdate-Key'
+    $body = @{ id=$EntryId; status=$Status; stageName=$StageName;
+               stageNumber=$StageNumber; totalStages=$TotalStages;
+               statusMessage=$StatusMessage } | ConvertTo-Json
+    try {
+        Invoke-RestMethod -Uri $url -Method Post -Body $body `
+            -Headers @{ "Content-Type"="application/json"; "x-update-key"=$key }
+    } catch { Write-Warning "Status update failed: $_" }
+}
 
 $sig_group = $null
 if ($department -like "Stockton*") {
@@ -22,7 +37,7 @@ else {
 
 #Connect-ExchangeOnline -Certificate $cert -AppId "00e3f1f7-c34d-4588-b8d2-1bc766cb7c0d" -Organization "sacramentokings.onmicrosoft.com"
 #Connect-ExchangeOnline -Credential $credential -Organization "sacramentokings.onmicrosoft.com"
-
+try {
 $tenantId = Get-AutomationVariable -Name 'AzureAD-TenantId'
 $clientId = Get-AutomationVariable -Name 'Exchange-ClientId'
 $clientSecret = Get-AutomationVariable -Name 'Exchange-ClientSecret'
@@ -37,12 +52,13 @@ $tokenResponse = Invoke-RestMethod -Method Post -Uri "https://login.microsoftonl
     }
 
 $accessToken = $tokenResponse.access_token
-
+Set-EntryStatus $entryId "stage_exchange_tasks" "Configuring Exchange" 3 3 $null
 Connect-ExchangeOnline -AccessToken $accessToken -Organization "sacramentokings.onmicrosoft.com"
 #Write $tokenResponse
 
 $mbuser = $null
     do {
+        Set-EntryStatus $entryId "stage_exchange_tasks" "Waiting for Mailbox" 3 3 $null
        try{
            $mbuser = Get-EXOMailbox -UserPrincipalName $upn 
         
@@ -65,7 +81,7 @@ $mbuser = $null
     }
 
 Disconnect-ExchangeOnline -Confirm:$false
-
+Set-EntryStatus $entryId "stage_exchange_tasks" "Sending Welcome Email" 3 3 $null
 
 #write to welcome email logic app
 $tenantId = Get-AutomationVariable -Name 'AzureAD-TenantId'
@@ -115,3 +131,7 @@ $headers = @{
 # Send the message to the queue
 $response = Invoke-RestMethod -Uri $queueUri -Method Post -Headers $headers -Body $body
 #Write-Output "Message pushed to queue successfully.
+Set-EntryStatus $entryId "provisioned" $null $null $null $null
+} catch {
+    Set-EntryStatus $entryId "failed" "Exchange Tasks" 3 3 $_.Exception.Message
+}
