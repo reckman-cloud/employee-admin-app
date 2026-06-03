@@ -4,9 +4,17 @@ on:
   push:
     branches:
       "**"
+    paths:
+      - 'client/**'
+      - 'api/**'
+      - 'data/**'
   pull_request:
     types: [opened, synchronize, reopened, closed]
     branches: [ main ]
+    paths:
+      - 'client/**'
+      - 'api/**'
+      - 'data/**'
   workflow_dispatch: {}
 
 jobs:
