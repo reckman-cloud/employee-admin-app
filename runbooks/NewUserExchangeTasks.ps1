@@ -23,9 +23,9 @@ else {
 #Connect-ExchangeOnline -Certificate $cert -AppId "00e3f1f7-c34d-4588-b8d2-1bc766cb7c0d" -Organization "sacramentokings.onmicrosoft.com"
 #Connect-ExchangeOnline -Credential $credential -Organization "sacramentokings.onmicrosoft.com"
 
-$tenantId = "f4b24903-3e53-44b6-a33e-24597567c14e"
-$clientId = "00e3f1f7-c34d-4588-b8d2-1bc766cb7c0d"
-$clientSecret = "sio8Q~Y1FgjgjriCDYIqICh1O.mp6d4AdWSzWaiE"
+$tenantId = Get-AutomationVariable -Name 'AzureAD-TenantId'
+$clientId = Get-AutomationVariable -Name 'Exchange-ClientId'
+$clientSecret = Get-AutomationVariable -Name 'Exchange-ClientSecret'
 $scope = "https://outlook.office365.com/.default"
 
 $tokenResponse = Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" `
@@ -68,9 +68,9 @@ Disconnect-ExchangeOnline -Confirm:$false
 
 
 #write to welcome email logic app
-$tenantId = "f4b24903-3e53-44b6-a33e-24597567c14e"
-$clientId = "19d50aa6-ce7d-4262-a25e-b2a626f56d77"
-$clientSecret = "WeY8Q~RPaQbilAel9jRPmsVrsRT9Co6F11ky1c7n"
+$tenantId = Get-AutomationVariable -Name 'AzureAD-TenantId'
+$clientId = Get-AutomationVariable -Name 'Storage-ClientId'
+$clientSecret = Get-AutomationVariable -Name 'Storage-ClientSecret'
 $storageAccountName = "kingsnewaccounts"
 $queueName = "newaccounts"
 $message = @{
