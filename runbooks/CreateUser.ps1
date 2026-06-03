@@ -1,5 +1,5 @@
 Param(
-     [parameter] (Mandatory=$true)]
+     [parameter (Mandatory=$true)]
      [String]$entryId,
      [parameter (Mandatory=$true)]
      [String]$firstName,
