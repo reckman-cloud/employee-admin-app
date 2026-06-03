@@ -1,5 +1,7 @@
 Param(
      [parameter (Mandatory=$true)]
+     [String]$entryId,
+     [parameter (Mandatory=$true)]
      [String]$data,
      [parameter (Mandatory=$true)]
      [Boolean]$fulltime,
@@ -8,7 +10,18 @@ Param(
 )
 
 #Write-Out $data
-
+function Set-EntryStatus {
+    param($EntryId, $Status, $StageName, $StageNumber, $TotalStages, $StatusMessage)
+    $url = Get-AutomationVariable -Name 'StatusUpdate-Url'
+    $key = Get-AutomationVariable -Name 'StatusUpdate-Key'
+    $body = @{ id=$EntryId; status=$Status; stageName=$StageName;
+               stageNumber=$StageNumber; totalStages=$TotalStages;
+               statusMessage=$StatusMessage } | ConvertTo-Json
+    try {
+        Invoke-RestMethod -Uri $url -Method Post -Body $body `
+            -Headers @{ "Content-Type"="application/json"; "x-update-key"=$key }
+    } catch { Write-Warning "Status update failed: $_" }
+}
 
 $kingsnetworkid = Get-AutomationVariable -Name 'Graph-KingsNetworkGroupId'
 $appid = Get-AutomationVariable -Name 'Graph-ClientId'
@@ -20,6 +33,8 @@ $clientsecretcred = New-Object -TypeName System.Management.Automation.PSCredenti
 $dataarr = $data -split '@'
 if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
 
+    Set-EntryStatus $entryId "stage_cloud_provisioning" "Assigning Licenses" 2 3 $null
+    try {
     Connect-MgGraph -ClientSecretCredential $clientsecretcred -TenantId $tenantId
     $e5Sku = Get-MgSubscribedSku -All | Where SkuPartNumber -eq 'SPE_E5'
     $vivaSku = Get-MgSubscribedSku -All | Where SkuPartNumber -eq 'Viva_Connection_Mini_Bundle'
@@ -35,12 +50,18 @@ if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
             @{SkuId = $vivaSku.SkuId}
         )
         Set-MgUserLicense -UserId $data -AddLicenses $addLicenses -RemoveLicenses @()
+
         New-MgGroupMember -GroupId $kingsnetworkid -DirectoryObjectId $userid
     #    New-MgGroupMember -GroupId $sig_groupid -DirectoryObjectId $userid
+
+   
         
     } else {
         Set-MgUserLicense -UserId $data -AddLicenses @{SkuId = $e5Sku.SkuId} -RemoveLicenses @()
     }
+    Set-EntryStatus $entryId "stage_exchange_tasks" "Waiting for Exchange" 3 3 $null
     Disconnect-MgGraph
-
+    } catch {
+        Set-EntryStatus $entryId "failed" "Cloud Provisioning" 2 3 $_.Exception.Message
+    }
 }
