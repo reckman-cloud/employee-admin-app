@@ -6,6 +6,30 @@ const API = {
   lists: '/api/lists',
   submitAll: '/api/submit-all',
   health: '/api/health',
+  status: '/api/status',
+};
+
+// Statuses that mean the entry is actively moving through the pipeline and
+// should be polled for updates.
+const IN_FLIGHT_STATUSES = new Set(['queued', 'processing']);
+const isInFlight = s => IN_FLIGHT_STATUSES.has(s) || /^stage_/.test(s || '');
+
+// Statuses that block re-submission (already in the pipeline or done).
+const isSubmitted = s => s && s !== 'pending' && s !== 'failed';
+
+const STATUS_META = {
+  pending:     { label: 'Pending',     color: '#6b7280' },
+  queued:      { label: 'Queued',      color: '#3b82f6' },
+  processing:  { label: 'Processing',  color: '#f59e0b' },
+  provisioned: { label: 'Provisioned', color: '#10b981' },
+  failed:      { label: 'Failed',      color: '#ef4444' },
+};
+
+const getStatusMeta = status => {
+  if (!status || status === 'pending') return STATUS_META.pending;
+  if (STATUS_META[status]) return STATUS_META[status];
+  if (/^stage_/.test(status)) return { label: status.replace(/^stage_/, '').replace(/_/g, ' '), color: '#f59e0b' };
+  return { label: status, color: '#6b7280' };
 };
 
 // LocalStorage key for persisting saved employee entries between sessions.
@@ -253,12 +277,50 @@ function ManagerComboBox({ managers, value, onSelect, error }) {
   );
 }
 
+function StatusBadge({ entry }) {
+  const status = entry._meta?.status || 'pending';
+  const meta = getStatusMeta(status);
+  const stageName = entry._meta?.stageName;
+  const stageNumber = entry._meta?.stageNumber;
+  const totalStages = entry._meta?.totalStages;
+  const statusMessage = entry._meta?.statusMessage;
+
+  const label = stageName
+    ? stageName
+    : meta.label;
+
+  const progress = stageNumber != null && totalStages != null
+    ? ` (${stageNumber}/${totalStages})`
+    : '';
+
+  return (
+    <span
+      title={statusMessage || label}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        padding: '2px 8px',
+        borderRadius: 12,
+        fontSize: 11,
+        fontWeight: 600,
+        background: `${meta.color}22`,
+        color: meta.color,
+        border: `1px solid ${meta.color}55`,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: meta.color, display: 'inline-block', flexShrink: 0 }} />
+      {label}{progress}
+    </span>
+  );
+}
+
 function EntriesTable({ entries, onEdit, onDelete }) {
   if (!entries.length) {
     return <div className="muted" id="empty-state">No entries yet. Submit the form to see items here.</div>;
   }
 
-  // Render a compact summary of saved entries with edit/delete controls.
   return (
     <div id="entries-wrap">
       <table aria-describedby="entries-count">
@@ -272,39 +334,47 @@ function EntriesTable({ entries, onEdit, onDelete }) {
             <th>Start Date</th>
             <th>Full Time</th>
             <th>Manager</th>
+            <th>Status</th>
             <th style={{ width: 180 }}>Actions</th>
           </tr>
         </thead>
 
         <tbody>
-          {entries.map(entry => (
-            <tr key={entry.id}>
-              <td>{entry.firstName}</td>
-              <td>{entry.lastName}</td>
-              <td>{entry.title}</td>
-              <td>{entry.department}</td>
-              <td>
-                <span className="chip">{entry.businessUnit}</span>
-              </td>
-              <td>
-                <span className="chip">{formatStartDate(entry.startDate)}</span>
-              </td>
-              <td>
-                <span className="chip">{entry.fullTime ? 'Yes' : 'No'}</span>
-              </td>
-              <td>
-                <span className="chip">{entry.managerName || entry.managerUpn || entry.managerId}</span>
-              </td>
-              <td>
-                <button type="button" onClick={() => onEdit(entry.id)}>
-                  Edit
-                </button>{' '}
-                <button type="button" onClick={() => onDelete(entry.id)}>
-                  Delete
-                </button>
-              </td>
-            </tr>
-          ))}
+          {entries.map(entry => {
+            const status = entry._meta?.status || 'pending';
+            const submitted = isSubmitted(status);
+            return (
+              <tr key={entry.id}>
+                <td>{entry.firstName}</td>
+                <td>{entry.lastName}</td>
+                <td>{entry.title}</td>
+                <td>{entry.department}</td>
+                <td>
+                  <span className="chip">{entry.businessUnit}</span>
+                </td>
+                <td>
+                  <span className="chip">{formatStartDate(entry.startDate)}</span>
+                </td>
+                <td>
+                  <span className="chip">{entry.fullTime ? 'Yes' : 'No'}</span>
+                </td>
+                <td>
+                  <span className="chip">{entry.managerName || entry.managerUpn || entry.managerId}</span>
+                </td>
+                <td>
+                  <StatusBadge entry={entry} />
+                </td>
+                <td>
+                  <button type="button" onClick={() => onEdit(entry.id)} disabled={submitted}>
+                    Edit
+                  </button>{' '}
+                  <button type="button" onClick={() => onDelete(entry.id)}>
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -335,10 +405,14 @@ export default function FormApp() {
   });
   const [errors, setErrors] = useState({});
   const [entries, setEntries] = useLocalStorage(STORAGE_KEY, []);
+  const entriesRef = useRef(entries);
+  useEffect(() => { entriesRef.current = entries; }, [entries]);
+  const pollNowRef = useRef(null);
   const [toast, setToast] = useState('');
 
+  // Count entries that can still be submitted (pending or previously failed).
   const unsubmitted = useMemo(
-    () => entries.filter(entry => !entry._meta?.submittedAt).length,
+    () => entries.filter(entry => !isSubmitted(entry._meta?.status)).length,
     [entries],
   );
 
@@ -373,6 +447,63 @@ export default function FormApp() {
 
     return () => {
       alive = false;
+    };
+  }, []);
+
+  // Poll /api/status for any entries currently in the pipeline. Runs every
+  // 30s while the page is visible; skips when there's nothing to watch.
+  useEffect(() => {
+    let alive = true;
+    const controllerRef = { current: null };
+
+    const poll = async () => {
+      const toWatch = entriesRef.current.filter(e => isInFlight(e._meta?.status));
+      if (!toWatch.length) return;
+
+      controllerRef.current?.abort();
+      const ac = new AbortController();
+      controllerRef.current = ac;
+
+      try {
+        const ids = toWatch.map(e => e.id).join(',');
+        const response = await fetch(`${API.status}?ids=${encodeURIComponent(ids)}`, { signal: ac.signal });
+        if (!response.ok || !alive) return;
+
+        const data = await response.json();
+        if (!data?.statuses) return;
+
+        setEntries(previous =>
+          previous.map(entry => {
+            const update = data.statuses[entry.id];
+            if (!update) return entry;
+            return {
+              ...entry,
+              _meta: {
+                ...entry._meta,
+                status: update.status,
+                stageName: update.stageName,
+                stageNumber: update.stageNumber,
+                totalStages: update.totalStages,
+                failedStage: update.failedStage,
+                statusMessage: update.statusMessage,
+                statusUpdatedAt: update.updatedAt,
+              },
+            };
+          }),
+        );
+      } catch {
+        // Polling errors are silent; next interval will retry.
+      }
+    };
+
+    pollNowRef.current = poll;
+    poll();
+    const id = setInterval(() => { if (!document.hidden && alive) poll(); }, 15000);
+
+    return () => {
+      alive = false;
+      clearInterval(id);
+      controllerRef.current?.abort();
     };
   }, []);
 
@@ -447,7 +578,7 @@ export default function FormApp() {
           )
         : [
             ...previous,
-            { ...form, id: uuid(), _meta: { savedAt: now, submittedAt: null, schema: 4 } },
+            { ...form, id: uuid(), _meta: { savedAt: now, submittedAt: null, status: 'pending', schema: 5 } },
           ],
     );
 
@@ -515,10 +646,9 @@ export default function FormApp() {
     URL.revokeObjectURL(anchor.href);
   };
 
-  // Submit all saved entries to the API, prune accepted ones locally, and
-  // surface a toast summarizing the result.
+  // Submit pending/failed entries to the API and update their status in place.
   const submitAll = async () => {
-    const toSubmit = entries;
+    const toSubmit = entries.filter(e => !isSubmitted(e._meta?.status));
     if (!toSubmit.length) {
       showToast('Nothing to submit.');
       return;
@@ -538,14 +668,46 @@ export default function FormApp() {
       return;
     }
 
+    const now = new Date().toISOString();
     const acceptedIds = new Set((result.accepted || []).map(x => x.id));
-    const failed = result.failed || [];
+    const failedIds = new Set((result.failed || []).map(x => x.id));
 
-    setEntries(previous => previous.filter(entry => !acceptedIds.has(entry.id)));
+    setEntries(previous =>
+      previous.map(entry => {
+        if (acceptedIds.has(entry.id)) {
+          return {
+            ...entry,
+            _meta: {
+              ...entry._meta,
+              submittedAt: now,
+              status: 'queued',
+              stageName: null,
+              stageNumber: null,
+              totalStages: null,
+              failedStage: null,
+              statusMessage: null,
+              statusUpdatedAt: now,
+            },
+          };
+        }
+        if (failedIds.has(entry.id)) {
+          return {
+            ...entry,
+            _meta: { ...entry._meta, status: 'failed', statusMessage: 'Queue submission failed' },
+          };
+        }
+        return entry;
+      }),
+    );
 
     const ok = acceptedIds.size;
-    const fail = failed.length;
-    showToast(fail ? `Submitted ${ok}, ${fail} failed.` : `Submitted ${ok} and cleared.`);
+    const fail = failedIds.size;
+    showToast(fail ? `Queued ${ok}, ${fail} failed.` : `Queued ${ok}.`);
+
+    // Poll shortly after submit so the status badge updates without waiting
+    // for the next scheduled interval tick. The delay gives Table Storage a
+    // moment to settle after the submit-all write.
+    if (ok > 0) setTimeout(() => pollNowRef.current?.(), 3000);
   };
 
   return (
