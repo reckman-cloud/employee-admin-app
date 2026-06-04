@@ -6,6 +6,12 @@ Param(
      [parameter (Mandatory=$true)]
      [Boolean]$fulltime,
      [parameter (Mandatory=$true)]
+     [String]$firstname,
+     [parameter (Mandatory=$true)]
+     [String]$lastname,
+     [parameter (Mandatory=$true)]
+     [Boolean]$title,
+     [parameter (Mandatory=$true)]
      [String]$department
 )
 
@@ -90,13 +96,13 @@ $clientSecret = Get-AutomationVariable -Name 'Storage-ClientSecret'
 $storageAccountName = "kingsnewaccounts"
 $queueName = "newaccounts"
 $message = @{
-    Name = $user.firstname
-    LastName = $user.lastname
-    Email = $user.upn
+    Name = $firstname
+    LastName = $lastname
+    Email = $upn
     PartitionKey = "h39874"
-    RowKey = $user.upn + (Get-Date).ToString('MM-dd-yyyy')
-    Title = $user.title
-    Department = $user.department
+    RowKey = $upn + (Get-Date).ToString('MM-dd-yyyy')
+    Title = $title
+    Department = $department
 } | ConvertTo-Json -Depth 10
 
 # Get OAuth 2.0 token for Azure Storage API
