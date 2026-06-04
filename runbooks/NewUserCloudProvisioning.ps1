@@ -48,8 +48,8 @@ if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
         
         $body = @{
         addLicenses = @(
-            @{SkuId = $e5Sku.SkuId},
-            @{SkuId = $vivaSku.SkuId}
+            @{skuId = $e5Sku.SkuId},
+            @{skuId = $vivaSku.SkuId}
         )
         removeLicenses = @()
         }
@@ -64,7 +64,7 @@ if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
         #Set-MgUserLicense -UserId $data -AddLicenses @{SkuId = $e5Sku.SkuId} -RemoveLicenses @()
         $body = @{
         addLicenses = @(
-             @{SkuId = $e5sku.SkuId}
+             @{skuId = $e5sku.SkuId}
         )
         removeLicenses = @()
         }
