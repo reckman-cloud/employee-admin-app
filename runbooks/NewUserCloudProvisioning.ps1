@@ -45,9 +45,13 @@ if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
     Update-MgUser -UserId $data -UsageLocation US
     
     if ($fulltime -and $department -ne "Rivercats") {
-        $addLicenses = @(
+        
+        $body = @(
+        addLicenses = @(
             @{SkuId = $e5Sku.SkuId},
             @{SkuId = $vivaSku.SkuId}
+        )
+        removeLicenses = @()
         )
         #Set-MgUserLicense -UserId $data -AddLicenses $addLicenses -RemoveLicenses @()
 
@@ -58,15 +62,14 @@ if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
         
     } else {
         #Set-MgUserLicense -UserId $data -AddLicenses @{SkuId = $e5Sku.SkuId} -RemoveLicenses @()
-        $addLicenses = @(
+        $body = @(
+        addLicenses = @(
              @{SkuId = $e5sku.SkuId}
+        )
+        removeLicenses = @()
         )
     }
 
-     $body = @{
-     addLicenses = $addLicenses
-     removeLicenses = @()
-     }
      Invoke-MgGraphRequest -Method POST `
     -Uri "https://graph.microsoft.com/v1.0/users/$data/assignLicense" `
     -Body ($body | ConvertTo-Json -Depth 5) `
