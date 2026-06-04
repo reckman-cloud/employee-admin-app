@@ -46,13 +46,13 @@ if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
     
     if ($fulltime -and $department -ne "Rivercats") {
         
-        $body = @(
+        $body = @{
         addLicenses = @(
             @{SkuId = $e5Sku.SkuId},
             @{SkuId = $vivaSku.SkuId}
         )
         removeLicenses = @()
-        )
+        }
         #Set-MgUserLicense -UserId $data -AddLicenses $addLicenses -RemoveLicenses @()
 
         New-MgGroupMember -GroupId $kingsnetworkid -DirectoryObjectId $userid
@@ -62,12 +62,12 @@ if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
         
     } else {
         #Set-MgUserLicense -UserId $data -AddLicenses @{SkuId = $e5Sku.SkuId} -RemoveLicenses @()
-        $body = @(
+        $body = @{
         addLicenses = @(
              @{SkuId = $e5sku.SkuId}
         )
         removeLicenses = @()
-        )
+        }
     }
 
      Invoke-MgGraphRequest -Method POST `
