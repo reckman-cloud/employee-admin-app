@@ -407,6 +407,7 @@ export default function FormApp() {
   const [entries, setEntries] = useLocalStorage(STORAGE_KEY, []);
   const entriesRef = useRef(entries);
   useEffect(() => { entriesRef.current = entries; }, [entries]);
+  const pollNowRef = useRef(null);
   const [toast, setToast] = useState('');
 
   // Count entries that can still be submitted (pending or previously failed).
@@ -495,8 +496,9 @@ export default function FormApp() {
       }
     };
 
+    pollNowRef.current = poll;
     poll();
-    const id = setInterval(() => { if (!document.hidden && alive) poll(); }, 30000);
+    const id = setInterval(() => { if (!document.hidden && alive) poll(); }, 15000);
 
     return () => {
       alive = false;
@@ -701,6 +703,11 @@ export default function FormApp() {
     const ok = acceptedIds.size;
     const fail = failedIds.size;
     showToast(fail ? `Queued ${ok}, ${fail} failed.` : `Queued ${ok}.`);
+
+    // Poll shortly after submit so the status badge updates without waiting
+    // for the next scheduled interval tick. The delay gives Table Storage a
+    // moment to settle after the submit-all write.
+    if (ok > 0) setTimeout(() => pollNowRef.current?.(), 3000);
   };
 
   return (
