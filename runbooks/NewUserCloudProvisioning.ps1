@@ -76,5 +76,6 @@ if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
     Disconnect-MgGraph
     } catch {
         Set-EntryStatus $entryId "failed" "Cloud Provisioning" 2 3 $_.Exception.Message
+        Write-output "$_.Exception.Message"
     }
 }
