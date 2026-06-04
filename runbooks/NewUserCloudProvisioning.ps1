@@ -64,7 +64,7 @@ if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
     }
 
      $body = @{
-     $addLicenses
+     addLicenses = $addLicenses
      removeLicenses = @()
      }
      Invoke-MgGraphRequest -Method POST `
