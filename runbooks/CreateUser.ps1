@@ -25,7 +25,7 @@ function Set-EntryStatus {
                stageNumber=$StageNumber; totalStages=$TotalStages;
                statusMessage=$StatusMessage } | ConvertTo-Json
     try {
-        Invoke-RestMethod -Uri $url -Method Post -Body $body `
+        $null = Invoke-RestMethod -Uri $url -Method Post -Body $body `
             -Headers @{ "Content-Type"="application/json"; "x-update-key"=$key }
     } catch { Write-Warning "Status update failed: $_" }
 }
