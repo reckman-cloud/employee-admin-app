@@ -10,7 +10,7 @@ Param(
      [parameter (Mandatory=$true)]
      [String]$lastname,
      [parameter (Mandatory=$true)]
-     [Boolean]$title,
+     [String]$title,
      [parameter (Mandatory=$true)]
      [String]$department
 )
