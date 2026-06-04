@@ -49,7 +49,7 @@ if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
             @{SkuId = $e5Sku.SkuId},
             @{SkuId = $vivaSku.SkuId}
         )
-        Set-MgUserLicense -UserId $data -AddLicenses $addLicenses -RemoveLicenses @()
+        #Set-MgUserLicense -UserId $data -AddLicenses $addLicenses -RemoveLicenses @()
 
         New-MgGroupMember -GroupId $kingsnetworkid -DirectoryObjectId $userid
     #    New-MgGroupMember -GroupId $sig_groupid -DirectoryObjectId $userid
@@ -57,8 +57,21 @@ if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
    
         
     } else {
-        Set-MgUserLicense -UserId $data -AddLicenses @{SkuId = $e5Sku.SkuId} -RemoveLicenses @()
+        #Set-MgUserLicense -UserId $data -AddLicenses @{SkuId = $e5Sku.SkuId} -RemoveLicenses @()
+        $addLicenses = @(
+             @{SkuId = $e5sku.SkuId}
+        )
     }
+
+     $body = @{
+     $addLicenses
+     removeLicenses = @()
+     }
+     Invoke-MgGraphRequest -Method POST `
+    -Uri "https://graph.microsoft.com/v1.0/users/$data/assignLicense" `
+    -Body ($body | ConvertTo-Json -Depth 5) `
+    -ContentType "application/json"
+    
     Set-EntryStatus $entryId "stage_exchange_tasks" "Waiting for Exchange" 3 3 $null
     Disconnect-MgGraph
     } catch {
