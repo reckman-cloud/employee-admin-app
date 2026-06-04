@@ -43,6 +43,17 @@ if ($dataarr[0].length -ne 0 -and $dataarr[1].length -ne 0) {
 
     $userid = (Get-MgUser -UserId $data).Id
     Update-MgUser -UserId $data -UsageLocation US
+
+    $retries = 5
+     do {
+         Start-Sleep -Seconds 3
+         $userLocation = (Get-MgUser -UserId $data -Property UsageLocation).UsageLocation
+         $retries--
+     } until ($userLocation -eq "US" -or $retries -eq 0)
+
+     if ($userLocation -ne "US") {
+         throw "Usage location did not propagate for $data after multiple retries"
+     }
     
     if ($fulltime -and $department -ne "Rivercats") {
         
