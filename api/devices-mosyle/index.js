@@ -67,8 +67,11 @@ function parseJson(text) {
   }
 }
 
-function bearerToken(body) {
+function bearerToken(response, body) {
+  const authorization = response.headers?.get?.('authorization') || '';
+  const headerToken = authorization.replace(/^Bearer\s+/i, '').trim();
   const candidates = [
+    headerToken,
     body?.bearerToken,
     body?.bearer_token,
     body?.token,
@@ -152,16 +155,16 @@ module.exports = async function (context, req) {
     }
 
     const loginText = await loginResponse.text();
-    const token = bearerToken(parseJson(loginText));
+    const token = bearerToken(loginResponse, parseJson(loginText));
     if (!token) {
-      context.log.error('Mosyle login response did not include a bearer token');
+      context.log.error('Mosyle login response did not include an Authorization bearer token');
       context.res = {
         status: 502,
         headers: responseHeaders,
         body: {
           ok: false,
           reason: 'mosyle-login-failed',
-          errors: ['Mosyle login response did not include a bearer token.'],
+          errors: ['Mosyle login response did not include a bearer token in the Authorization header or response body.'],
         },
       };
       return;
