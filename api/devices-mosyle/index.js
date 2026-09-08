@@ -59,6 +59,45 @@ function errorDetails(body) {
   return details;
 }
 
+function parseJson(text) {
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return null;
+  }
+}
+
+function bearerToken(body) {
+  const candidates = [
+    body?.bearerToken,
+    body?.bearer_token,
+    body?.token,
+    body?.accessToken,
+    body?.access_token,
+    body?.response?.bearerToken,
+    body?.response?.token,
+    body?.response?.accessToken,
+    body?.response?.[0]?.bearerToken,
+    body?.response?.[0]?.token,
+    body?.response?.[0]?.accessToken,
+  ];
+  return candidates.find(value => typeof value === 'string' && value.trim())?.trim() || '';
+}
+
+async function failure(context, response, operation) {
+  const responseText = await response.text();
+  const body = parseJson(responseText);
+  const errors = errorDetails(body);
+  if (!errors.length && responseText) errors.push(responseText.trim().slice(0, 500));
+  context.log.error(`Mosyle ${operation} failed`, response.status, errors.join('; '));
+  return {
+    ok: false,
+    reason: `mosyle-${operation}-failed`,
+    upstreamStatus: response.status,
+    errors: [`Mosyle ${operation} returned HTTP ${response.status}`, ...errors],
+  };
+}
+
 module.exports = async function (context, req) {
   const responseHeaders = headers(req);
   if (req.method === 'OPTIONS') {
@@ -76,38 +115,75 @@ module.exports = async function (context, req) {
     return;
   }
 
-  const endpoint = process.env.MOSYLE_API_URL || 'https://managerapi.mosyle.com/v2/listdevices';
-  const token = process.env.MOSYLE_API_TOKEN || '';
-  if (!token) {
-    context.res = { status: 503, headers: responseHeaders, body: { ok: false, reason: 'mosyle-not-configured' } };
+  const apiUrl = (process.env.MOSYLE_API_URL || 'https://businessapi.mosyle.com/v1').replace(/\/$/, '');
+  const accessToken = process.env.MOSYLE_API_TOKEN || '';
+  const email = process.env.MOSYLE_API_EMAIL || '';
+  const password = process.env.MOSYLE_API_PASSWORD || '';
+  if (!accessToken || !email || !password) {
+    const missing = [
+      !accessToken && 'MOSYLE_API_TOKEN',
+      !email && 'MOSYLE_API_EMAIL',
+      !password && 'MOSYLE_API_PASSWORD',
+    ].filter(Boolean);
+    context.res = {
+      status: 503,
+      headers: responseHeaders,
+      body: {
+        ok: false,
+        reason: 'mosyle-not-configured',
+        errors: [`Missing Mosyle configuration: ${missing.join(', ')}`],
+      },
+    };
     return;
   }
 
   try {
-    const mosyleResponse = await fetch(endpoint, {
+    const loginResponse = await fetch(`${apiUrl}/login`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { accessToken, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        accessToken: token,
-        options: { serial_numbers: [serialNumber], page: 1, page_size: 1 },
+        email,
+        password,
       }),
     });
-    const responseText = await mosyleResponse.text();
-    let body = null;
-    try { body = responseText ? JSON.parse(responseText) : null; } catch {}
-    if (!mosyleResponse.ok) {
-      const errors = errorDetails(body);
-      if (!errors.length && responseText) errors.push(responseText.trim().slice(0, 500));
-      context.log.error('Mosyle device search failed', mosyleResponse.status, errors.join('; '));
+    if (!loginResponse.ok) {
+      context.res = { status: 502, headers: responseHeaders, body: await failure(context, loginResponse, 'login') };
+      return;
+    }
+
+    const loginText = await loginResponse.text();
+    const token = bearerToken(parseJson(loginText));
+    if (!token) {
+      context.log.error('Mosyle login response did not include a bearer token');
       context.res = {
         status: 502,
         headers: responseHeaders,
         body: {
           ok: false,
-          reason: 'mosyle-search-failed',
-          upstreamStatus: mosyleResponse.status,
-          errors: [`Mosyle API returned HTTP ${mosyleResponse.status}`, ...errors],
+          reason: 'mosyle-login-failed',
+          errors: ['Mosyle login response did not include a bearer token.'],
         },
+      };
+      return;
+    }
+
+    const mosyleResponse = await fetch(`${apiUrl}/devices`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        options: { serial_numbers: [serialNumber], page: 1, page_size: 1 },
+      }),
+    });
+    const responseText = await mosyleResponse.text();
+    const body = parseJson(responseText);
+    if (!mosyleResponse.ok) {
+      context.res = {
+        status: 502,
+        headers: responseHeaders,
+        body: await failure(context, {
+          status: mosyleResponse.status,
+          text: async () => responseText,
+        }, 'device search'),
       };
       return;
     }
