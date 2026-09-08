@@ -1,6 +1,15 @@
 const { fetch: undiciFetch } = require('undici');
 
 const fetch = global.fetch || undiciFetch;
+const DEVICE_COLUMNS = [
+  'serial_number',
+  'device_name',
+  'device_type',
+  'os',
+  'username',
+  'useremail',
+  'userid',
+];
 
 function headers(req) {
   return {
@@ -176,7 +185,7 @@ module.exports = async function (context, req) {
         serial_numbers: [serialNumber],
         page: 1,
         page_size: 1,
-        specific_columns: ['device_name', 'device_type', 'serial_number', 'os', 'username'],
+        specific_columns: DEVICE_COLUMNS,
       },
     };
     const mosyleResponse = await fetch(`${apiUrl}/devices`, {
@@ -205,7 +214,7 @@ module.exports = async function (context, req) {
     const device = rawDevice ? {
       serialNumber: rawDevice.serial_number || rawDevice.serialNumber || serialNumber,
       deviceName: rawDevice.device_name || rawDevice.deviceName || rawDevice.name || null,
-      assignedUser: rawDevice.username || rawDevice.user_name || rawDevice.assigned_user || rawDevice.user?.name || rawDevice.user?.email || null,
+      assignedUser: rawDevice.username || rawDevice.useremail || rawDevice.userid || null,
     } : null;
     context.res = { status: 200, headers: responseHeaders, body: { ok: true, found: Boolean(device), source: 'mosyle', device } };
   } catch (error) {
