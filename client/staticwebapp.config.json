@@ -4,6 +4,7 @@
     { "route": "/", "allowedRoles": ["it_admin", "it_helpdesk"] },
     { "route": "/form", "allowedRoles": ["it_admin"] },
     { "route": "/devices", "allowedRoles": ["it_admin", "it_helpdesk"] },
+    { "route": "/api/devices/*", "allowedRoles": ["it_admin", "it_helpdesk"] },
     { "route": "/api/status-update", "allowedRoles": ["anonymous"] },
     { "route": "/api/*", "allowedRoles": ["it_admin"] },
     { "route": "/login",  "redirect": "/.auth/login/aad?post_login_redirect_uri=/" },

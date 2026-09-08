@@ -4,9 +4,37 @@ import UserBadge from '../security/UserBadge.jsx';
 
 export default function Devices() {
   const [serialNumber, setSerialNumber] = useState('');
+  const [search, setSearch] = useState({ completed: false, loading: false, device: null, error: '' });
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
+    const serial = serialNumber.trim();
+    if (!serial) return;
+
+    setSearch({ completed: false, loading: true, device: null, error: '' });
+    const query = new URLSearchParams({ serialNumber: serial });
+    const results = await Promise.allSettled([
+      fetch(`/api/devices/intune?${query}`, { cache: 'no-store' }).then(async response => {
+        const body = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(body?.reason || 'intune-search-failed');
+        return body;
+      }),
+      fetch(`/api/devices/mosyle?${query}`, { cache: 'no-store' }).then(async response => {
+        const body = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(body?.reason || 'mosyle-search-failed');
+        return body;
+      }),
+    ]);
+    const matches = results
+      .filter(result => result.status === 'fulfilled' && result.value?.found)
+      .map(result => result.value);
+    const incompleteSearch = matches.length === 0 && results.some(result => result.status === 'rejected');
+    setSearch({
+      completed: true,
+      loading: false,
+      device: matches[0] || null,
+      error: incompleteSearch ? 'The device services could not be searched. Please try again.' : '',
+    });
   }
 
   return (
@@ -27,14 +55,40 @@ export default function Devices() {
                 value={serialNumber}
                 onChange={event => setSerialNumber(event.target.value)}
                 autoComplete="off"
+                required
               />
             </div>
             <div className="toolbar" style={{ marginTop: 14 }}>
-              <button className="primary" type="submit">Search</button>
+              <button className="primary" type="submit" disabled={search.loading}>
+                {search.loading ? 'Searching…' : 'Search'}
+              </button>
               <Link to="/">Back to home</Link>
             </div>
           </form>
         </section>
+        {search.completed && (
+          <section className="card" aria-labelledby="device-result-title">
+            <h2 id="device-result-title" style={{ marginTop: 0 }}>Device details</h2>
+            {search.error && <p className="err" role="alert">{search.error}</p>}
+            {!search.error && !search.device && <p className="muted">No device was found.</p>}
+            {!search.error && (
+              <dl>
+                <dt className="muted">Device serial</dt>
+                <dd>{search.device?.device?.serialNumber || '—'}</dd>
+                <dt className="muted">Device name</dt>
+                <dd>{search.device?.device?.deviceName || '—'}</dd>
+                <dt className="muted">Assigned user</dt>
+                <dd>{search.device?.device?.assignedUser || '—'}</dd>
+                {search.device && (
+                  <>
+                    <dt className="muted">Source</dt>
+                    <dd>{search.device.source === 'intune' ? 'Microsoft Intune' : 'Mosyle'}</dd>
+                  </>
+                )}
+              </dl>
+            )}
+          </section>
+        )}
       </main>
     </>
   );
