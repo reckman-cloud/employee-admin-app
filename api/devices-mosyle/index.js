@@ -172,7 +172,11 @@ module.exports = async function (context, req) {
 
     const mosyleResponse = await fetch(`${apiUrl}/devices`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: {
+        accessToken,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         options: { serial_numbers: [serialNumber], page: 1, page_size: 1 },
       }),
