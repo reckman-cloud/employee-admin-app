@@ -31,7 +31,7 @@ export default function Home(){
             )}
             {canViewDevices && (
               <Link to="/devices" style={{ textDecoration: 'none' }}>
-                <button type="button">Devices</button>
+                <button className="primary" type="button">Devices</button>
               </Link>
             )}
             <span className="muted">Save drafts locally and submit when ready.</span>
