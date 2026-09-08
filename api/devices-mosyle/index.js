@@ -1,4 +1,4 @@
-const testing;
+const testingone;
 const { fetch: undiciFetch } = require('undici');
 
 const fetch = global.fetch || undiciFetch;
