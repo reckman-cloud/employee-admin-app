@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import SignIn from '../screens/SignIn.jsx';
 import Home from '../screens/Home.jsx';
+import Devices from '../screens/Devices.jsx';
 import FormApp from '../FormApp.jsx';
 import RequireAdmin from '../security/RequireAdmin.jsx';
 
@@ -10,8 +11,9 @@ export default function AppRouter(){
     <BrowserRouter>
       <Routes>
         <Route path="/signin" element={<SignIn/>} />
-        <Route path="/" element={<RequireAdmin><Home/></RequireAdmin>} />
+        <Route path="/" element={<RequireAdmin allowedRoles={['it_admin', 'it_helpdesk']}><Home/></RequireAdmin>} />
         <Route path="/form" element={<RequireAdmin><FormApp/></RequireAdmin>} />
+        <Route path="/devices" element={<RequireAdmin allowedRoles={['it_admin', 'it_helpdesk']}><Devices/></RequireAdmin>} />
         <Route path="*" element={<Navigate to="/" replace/>} />
       </Routes>
     </BrowserRouter>
