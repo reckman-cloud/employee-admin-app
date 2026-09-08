@@ -170,7 +170,12 @@ module.exports = async function (context, req) {
       return;
     }
 
-    const mosyleResponse = await fetch(`${apiUrl}/devices`, {
+    // Mosyle deployments differ in whether the operation dispatcher reads the
+    // JSON payload or the query string. Supply it in both places so the request
+    // is recognized as a device list operation in either configuration.
+    const devicesUrl = new URL(`${apiUrl}/devices`);
+    devicesUrl.searchParams.set('operation', 'list');
+    const mosyleResponse = await fetch(devicesUrl, {
       method: 'POST',
       headers: {
         accessToken,
