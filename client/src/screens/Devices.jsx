@@ -11,7 +11,10 @@ export default function Devices() {
       const response = await fetch(url, { cache: 'no-store' });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
-        const details = Array.isArray(body?.errors) ? body.errors.join(', ') : body?.reason || body?.message;
+        const apiErrors = Array.isArray(body?.errors)
+          ? body.errors.map(error => typeof error === 'string' ? error : error?.message || JSON.stringify(error))
+          : [];
+        const details = apiErrors.length ? apiErrors.join('; ') : body?.reason || body?.message;
         throw new Error(details || `request failed (${response.status})`);
       }
       return body;

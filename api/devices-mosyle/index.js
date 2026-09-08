@@ -36,6 +36,29 @@ function deviceList(body) {
   return [];
 }
 
+function errorDetails(body) {
+  const details = [];
+  const visit = (value, key = '') => {
+    if (details.length >= 10 || value == null) return;
+    if (typeof value === 'string' || typeof value === 'number') {
+      if (['error', 'errors', 'message', 'detail', 'reason'].includes(key.toLowerCase())) {
+        const text = String(value).trim().slice(0, 500);
+        if (text && !details.includes(text)) details.push(text);
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(item => visit(item, key));
+      return;
+    }
+    if (typeof value === 'object') {
+      Object.entries(value).forEach(([childKey, childValue]) => visit(childValue, childKey));
+    }
+  };
+  visit(body);
+  return details;
+}
+
 module.exports = async function (context, req) {
   const responseHeaders = headers(req);
   if (req.method === 'OPTIONS') {
@@ -66,8 +89,25 @@ module.exports = async function (context, req) {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ options: { serial_numbers: [serialNumber], page: 1, page_size: 1 } }),
     });
-    const body = await mosyleResponse.json().catch(() => null);
-    if (!mosyleResponse.ok) throw new Error(`Mosyle returned ${mosyleResponse.status}`);
+    const responseText = await mosyleResponse.text();
+    let body = null;
+    try { body = responseText ? JSON.parse(responseText) : null; } catch {}
+    if (!mosyleResponse.ok) {
+      const errors = errorDetails(body);
+      if (!errors.length && responseText) errors.push(responseText.trim().slice(0, 500));
+      context.log.error('Mosyle device search failed', mosyleResponse.status, errors.join('; '));
+      context.res = {
+        status: 502,
+        headers: responseHeaders,
+        body: {
+          ok: false,
+          reason: 'mosyle-search-failed',
+          upstreamStatus: mosyleResponse.status,
+          errors: [`Mosyle API returned HTTP ${mosyleResponse.status}`, ...errors],
+        },
+      };
+      return;
+    }
 
     const rawDevice = deviceList(body)[0];
     const device = rawDevice ? {
@@ -78,6 +118,14 @@ module.exports = async function (context, req) {
     context.res = { status: 200, headers: responseHeaders, body: { ok: true, found: Boolean(device), source: 'mosyle', device } };
   } catch (error) {
     context.log.error('Mosyle device search failed', error?.message || error);
-    context.res = { status: 502, headers: responseHeaders, body: { ok: false, reason: 'mosyle-search-failed' } };
+    context.res = {
+      status: 502,
+      headers: responseHeaders,
+      body: {
+        ok: false,
+        reason: 'mosyle-search-failed',
+        errors: [error?.message || 'The Mosyle request could not be completed.'],
+      },
+    };
   }
 };
