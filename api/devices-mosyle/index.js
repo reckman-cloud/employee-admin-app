@@ -1,6 +1,4 @@
-const { fetch: undiciFetch } = require('undici');
-
-const fetch = global.fetch || undiciFetch;
+const fetch = global.fetch || require('undici').fetch;
 const DEVICE_COLUMNS = [
   'serial_number',
   'device_name',
@@ -126,6 +124,16 @@ function logStage(context, stage, details = {}) {
   }
 }
 
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 module.exports = async function (context, req) {
   const responseHeaders = headers(req);
   if (req.method === 'OPTIONS') {
@@ -147,6 +155,10 @@ module.exports = async function (context, req) {
   const accessToken = process.env.MOSYLE_API_TOKEN || '';
   const email = process.env.MOSYLE_API_EMAIL || '';
   const password = process.env.MOSYLE_API_PASSWORD || '';
+  const configuredTimeout = Number(process.env.MOSYLE_API_TIMEOUT_MS || 15000);
+  const timeoutMs = Number.isFinite(configuredTimeout)
+    ? Math.min(Math.max(configuredTimeout, 1000), 30000)
+    : 15000;
   if (!accessToken || !email || !password) {
     const missing = [
       !accessToken && 'MOSYLE_API_TOKEN',
@@ -165,16 +177,18 @@ module.exports = async function (context, req) {
     return;
   }
 
+  let stage = 'login-request';
   try {
     logStage(context, 'login-request', { url: `${apiUrl}/login` });
-    const loginResponse = await fetch(`${apiUrl}/login`, {
+    const loginResponse = await fetchWithTimeout(`${apiUrl}/login`, {
       method: 'POST',
       headers: { accessToken, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email,
         password,
       }),
-    });
+    }, timeoutMs);
+    stage = 'login-response';
     logStage(context, 'login-response', { status: loginResponse.status });
     if (!loginResponse.ok) {
       context.res = { status: 502, headers: responseHeaders, body: await failure(context, loginResponse, 'login') };
@@ -211,12 +225,13 @@ module.exports = async function (context, req) {
         specific_columns: DEVICE_COLUMNS,
       },
     };
+    stage = 'device-request';
     logStage(context, 'device-request', {
       url: `${apiUrl}/devices`,
       operation: deviceRequestBody.operation,
       optionKeys: Object.keys(deviceRequestBody.options),
     });
-    const mosyleResponse = await fetch(`${apiUrl}/devices`, {
+    const mosyleResponse = await fetchWithTimeout(`${apiUrl}/devices`, {
       method: 'POST',
       headers: {
         accessToken,
@@ -224,7 +239,8 @@ module.exports = async function (context, req) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(deviceRequestBody),
-    const responseText = await mosyleResponse.text();
+    }, timeoutMs);
+    stage = 'device-response';
     logStage(context, 'device-response', {
       status: mosyleResponse.status,
       responseType: mosyleResponse.headers?.get?.('content-type') || null,
@@ -248,7 +264,7 @@ module.exports = async function (context, req) {
     } : null;
     context.res = { status: 200, headers: responseHeaders, body: { ok: true, found: Boolean(device), source: 'mosyle', device } };
   } catch (error) {
-    context.log.error('Mosyle device search failed', error?.message || error);
+    context.log.error('Mosyle device search failed', stage, error?.message || error);
     context.res = {
       status: 502,
       headers: responseHeaders,
@@ -256,11 +272,16 @@ module.exports = async function (context, req) {
         ok: false,
         reason: 'mosyle-search-failed',
         diagnostics: {
-          stage: 'request-exception',
+          stage,
           invocationId: context.invocationId || null,
           errorType: error?.name || null,
+          timeoutMs,
         },
-        errors: [error?.message || 'The Mosyle request could not be completed.'],
+        errors: [
+          error?.name === 'AbortError'
+            ? `Mosyle ${stage} timed out after ${timeoutMs} ms.`
+            : error?.message || 'The Mosyle request could not be completed.',
+        ],
       },
     };
   }

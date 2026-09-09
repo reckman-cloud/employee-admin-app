@@ -12,6 +12,7 @@
     "MOSYLE_API_URL": "https://businessapi.mosyle.com/v1",
     "MOSYLE_API_TOKEN": "",
     "MOSYLE_API_EMAIL": "",
-    "MOSYLE_API_PASSWORD": ""
+    "MOSYLE_API_PASSWORD": "",
+    "MOSYLE_API_TIMEOUT_MS": "15000"
   }
 }
