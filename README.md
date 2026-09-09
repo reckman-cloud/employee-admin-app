@@ -26,4 +26,6 @@ Mosyle search failures include a sanitized diagnostic stage and Azure Functions 
 
 Mosyle login and device requests time out after 15 seconds by default so the function can return a structured error before the hosting platform terminates a stalled invocation. Set `MOSYLE_API_TIMEOUT_MS` to override this value; it is constrained to between 1 and 30 seconds.
 
+The `device-response` stage is entered only after Mosyle returns an HTTP response. Failures at that stage include Mosyle's response status and a parsed or bounded-text response body; a deployed `responseText is not defined` error indicates an older function artifact rather than the current response handler.
+
 To help diagnose preview slots, the `/api/health` response includes a masked snapshot of the storage configuration (queue name and connection-string length/preview) alongside the status. This makes it clear on the client whether environment variables were populated even when the connection cannot be established. When a connection attempt still fails, the response now returns a sanitized diagnostic payload (reason code, status code, redacted message, and parsed SAS/account metadata) and environment flags (for example, whether `crypto` was polyfilled for queue authentication) to help confirm permissions and endpoint selection without leaking secrets.

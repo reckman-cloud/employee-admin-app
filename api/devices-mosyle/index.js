@@ -94,11 +94,11 @@ function bearerToken(response, body) {
   return candidates.find(value => typeof value === 'string' && value.trim())?.trim() || '';
 }
 
-async function failure(context, response, operation, knownResponseText) {
-  const responseText = knownResponseText ?? await response.text();
-  const body = parseJson(responseText);
+async function failure(context, response, operation, knownText) {
+  const text = knownText ?? await response.text();
+  const body = parseJson(text);
   const errors = errorDetails(body);
-  if (!errors.length && responseText) errors.push(responseText.trim().slice(0, 500));
+  if (!errors.length && text) errors.push(text.trim().slice(0, 500));
   context.log.error(`Mosyle ${operation} failed`, response.status, errors.join('; '));
   return {
     ok: false,
@@ -241,17 +241,17 @@ module.exports = async function (context, req) {
       body: JSON.stringify(deviceRequestBody),
     }, timeoutMs);
     stage = 'device-response';
-    logStage(context, 'device-response', {
+    const deviceResponseText = await mosyleResponse.text();
       status: mosyleResponse.status,
       responseType: mosyleResponse.headers?.get?.('content-type') || null,
-      responseLength: responseText.length,
+      responseLength: deviceResponseText.length,
     });
-    const body = parseJson(responseText);
+    const body = parseJson(deviceResponseText);
     if (!mosyleResponse.ok) {
       context.res = {
         status: 502,
         headers: responseHeaders,
-        body: await failure(context, mosyleResponse, 'device search', responseText),
+        body: await failure(context, mosyleResponse, 'device search', deviceResponseText),
       };
       return;
     }
