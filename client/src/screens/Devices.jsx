@@ -9,13 +9,35 @@ export default function Devices() {
   async function searchProvider(provider, url) {
     try {
       const response = await fetch(url, { cache: 'no-store' });
-      const body = await response.json().catch(() => null);
+      const responseText = await response.text();
+      let body = null;
+      try {
+        body = responseText ? JSON.parse(responseText) : null;
+      } catch {
+        // Keep the raw response below so platform-generated errors are visible.
+      }
       if (!response.ok) {
         const apiErrors = Array.isArray(body?.errors)
           ? body.errors.map(error => typeof error === 'string' ? error : error?.message || JSON.stringify(error))
           : [];
-        const details = apiErrors.length ? apiErrors.join('; ') : body?.reason || body?.message;
-        throw new Error(details || `request failed (${response.status})`);
+        const diagnostics = body?.diagnostics
+          ? `diagnostics: ${JSON.stringify(body.diagnostics)}`
+          : '';
+        const rawResponse = responseText
+          ? responseText.replace(/\s+/g, ' ').trim().slice(0, 1000)
+          : '';
+        const requestId = response.headers.get('x-ms-request-id') || response.headers.get('x-azure-ref');
+        const fallback = [
+          `request failed (${response.status})`,
+          rawResponse,
+          `content-type: ${response.headers.get('content-type') || 'not provided'}`,
+          requestId ? `request-id: ${requestId}` : '',
+        ].filter(Boolean).join('; ');
+        const details = [
+          apiErrors.length ? apiErrors.join('; ') : body?.reason || body?.message,
+          diagnostics,
+        ].filter(Boolean).join('; ');
+        throw new Error(details || fallback);
       }
       return body;
     } catch (error) {

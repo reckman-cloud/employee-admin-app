@@ -96,8 +96,8 @@ function bearerToken(response, body) {
   return candidates.find(value => typeof value === 'string' && value.trim())?.trim() || '';
 }
 
-async function failure(context, response, operation) {
-  const responseText = await response.text();
+async function failure(context, response, operation, knownResponseText) {
+  const responseText = knownResponseText ?? await response.text();
   const body = parseJson(responseText);
   const errors = errorDetails(body);
   if (!errors.length && responseText) errors.push(responseText.trim().slice(0, 500));
@@ -106,8 +106,24 @@ async function failure(context, response, operation) {
     ok: false,
     reason: `mosyle-${operation}-failed`,
     upstreamStatus: response.status,
+    diagnostics: {
+      stage: operation,
+      invocationId: context.invocationId || null,
+      responseType: response.headers?.get?.('content-type') || null,
+    },
     errors: [`Mosyle ${operation} returned HTTP ${response.status}`, ...errors],
   };
+}
+
+function logStage(context, stage, details = {}) {
+  const log = context.log?.info || context.log;
+  if (typeof log === 'function') {
+    log('Mosyle device search diagnostic', {
+      stage,
+      invocationId: context.invocationId || null,
+      ...details,
+    });
+  }
 }
 
 module.exports = async function (context, req) {
@@ -150,6 +166,7 @@ module.exports = async function (context, req) {
   }
 
   try {
+    logStage(context, 'login-request', { url: `${apiUrl}/login` });
     const loginResponse = await fetch(`${apiUrl}/login`, {
       method: 'POST',
       headers: { accessToken, 'Content-Type': 'application/json' },
@@ -158,6 +175,7 @@ module.exports = async function (context, req) {
         password,
       }),
     });
+    logStage(context, 'login-response', { status: loginResponse.status });
     if (!loginResponse.ok) {
       context.res = { status: 502, headers: responseHeaders, body: await failure(context, loginResponse, 'login') };
       return;
@@ -173,6 +191,11 @@ module.exports = async function (context, req) {
         body: {
           ok: false,
           reason: 'mosyle-login-failed',
+          diagnostics: {
+            stage: 'login-token-extraction',
+            invocationId: context.invocationId || null,
+            responseType: loginResponse.headers?.get?.('content-type') || null,
+          },
           errors: ['Mosyle login response did not include a bearer token in the Authorization header or response body.'],
         },
       };
@@ -188,6 +211,11 @@ module.exports = async function (context, req) {
         specific_columns: DEVICE_COLUMNS,
       },
     };
+    logStage(context, 'device-request', {
+      url: `${apiUrl}/devices`,
+      operation: deviceRequestBody.operation,
+      optionKeys: Object.keys(deviceRequestBody.options),
+    });
     const mosyleResponse = await fetch(`${apiUrl}/devices`, {
       method: 'POST',
       headers: {
@@ -197,15 +225,17 @@ module.exports = async function (context, req) {
       },
       body: JSON.stringify(deviceRequestBody),
     const responseText = await mosyleResponse.text();
+    logStage(context, 'device-response', {
+      status: mosyleResponse.status,
+      responseType: mosyleResponse.headers?.get?.('content-type') || null,
+      responseLength: responseText.length,
+    });
     const body = parseJson(responseText);
     if (!mosyleResponse.ok) {
       context.res = {
         status: 502,
         headers: responseHeaders,
-        body: await failure(context, {
-          status: mosyleResponse.status,
-          text: async () => responseText,
-        }, 'device search'),
+        body: await failure(context, mosyleResponse, 'device search', responseText),
       };
       return;
     }
@@ -225,6 +255,11 @@ module.exports = async function (context, req) {
       body: {
         ok: false,
         reason: 'mosyle-search-failed',
+        diagnostics: {
+          stage: 'request-exception',
+          invocationId: context.invocationId || null,
+          errorType: error?.name || null,
+        },
         errors: [error?.message || 'The Mosyle request could not be completed.'],
       },
     };
