@@ -1,8 +1,20 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import UserBadge from '../security/UserBadge.jsx';
+import { getClientPrincipal, hasRole } from '../security/useAuth.js';
 
 export default function Home(){
+  const [principal, setPrincipal] = useState(null);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    getClientPrincipal({ signal: ac.signal }).then(setPrincipal).catch(() => setPrincipal(null));
+    return () => ac.abort();
+  }, []);
+
+  const canViewForm = hasRole(principal, 'it_admin');
+  const canViewDevices = hasRole(principal, 'it_admin') || hasRole(principal, 'it_helpdesk');
+
   return (
     <>
       <UserBadge />
@@ -10,11 +22,18 @@ export default function Home(){
         <section className="card" aria-labelledby="home-title">
           <p className="muted" style={{ margin: 0 }}>IT Admin Portal</p>
           <h1 id="home-title" style={{ marginTop: 6 }}>Employee Administration</h1>
-          <p className="muted">Submit and manage onboarding entries for new employees. Access is limited to users in the <code>it_admin</code> role.</p>
+          <p className="muted">Manage employee onboarding and IT devices from one place.</p>
           <div className="toolbar" style={{ marginTop: 12 }}>
-            <Link to="/form" style={{ textDecoration: 'none' }}>
-              <button className="primary" type="button">Go to Form app</button>
-            </Link>
+            {canViewForm && (
+              <Link to="/form" style={{ textDecoration: 'none' }}>
+                <button className="primary" type="button">Go to Form app</button>
+              </Link>
+            )}
+            {canViewDevices && (
+              <Link to="/devices" style={{ textDecoration: 'none' }}>
+                <button className="primary" type="button">Devices</button>
+              </Link>
+            )}
             <span className="muted">Save drafts locally and submit when ready.</span>
           </div>
         </section>

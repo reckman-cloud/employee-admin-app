@@ -8,6 +8,11 @@
     "MANAGERS_GROUP_NAME": "dyn-user-e5s",
     "MANAGERS_GROUP_ID": "d488d5a2-fba3-4c25-b64c-57c210284bc3",
     "AZURE_STATUS_TABLE_NAME": "employeestatus",
-    "STATUS_UPDATE_KEY": ""
+    "STATUS_UPDATE_KEY": "",
+    "MOSYLE_API_URL": "https://businessapi.mosyle.com/v1",
+    "MOSYLE_API_TOKEN": "",
+    "MOSYLE_API_EMAIL": "",
+    "MOSYLE_API_PASSWORD": "",
+    "MOSYLE_API_TIMEOUT_MS": "15000"
   }
 }
